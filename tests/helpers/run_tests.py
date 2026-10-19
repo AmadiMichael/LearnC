@@ -35,6 +35,14 @@ from check_escape import check as check_escape
 from check_escape import check_source as check_escape_source  # noqa: E402
 from check_expand import check as check_expand
 from check_expand import check_source as check_expand_source  # noqa: E402
+from check_itoa import check as check_itoa
+from check_itoa import check_source as check_itoa_source  # noqa: E402
+from check_itob import check as check_itob
+from check_itob import check_source as check_itob_source  # noqa: E402
+from check_itob import format_base as format_itob  # noqa: E402
+from check_itoaw import check as check_itoaw
+from check_itoaw import check_source as check_itoaw_source  # noqa: E402
+from check_itoaw import format_padded as format_itoaw  # noqa: E402
 from check_ranges import (  # noqa: E402
     FLOAT_TYPES,
     INTEGER_TYPES,
@@ -77,6 +85,9 @@ def compile_prog(src_name, bin_name, chapter="chapter1", defines=None):
                 "binsearch.c",
                 "escape.c",
                 "expand.c",
+                "itoa.c",
+                "itob.c",
+                "itoaw.c",
             )
             else ""
         )
@@ -612,17 +623,178 @@ def test_expand():
     return passed + p, failed + f
 
 
+def test_itoa():
+    print("\n== 3-4 itoa  (int to digits; must work for the most negative int) ==")
+    src = os.path.join(ROOT, "src", "chapter3", "itoa.c")
+    passed = failed = 0
+    if os.path.isfile(src):
+        ok, detail = check_itoa_source(read(src))
+        if ok:
+            passed += say(True, "has-itoa")
+        else:
+            failed += not say(False, "has-itoa", detail)
+    else:
+        say(False, "compile", "missing src/chapter3/itoa.c — write your program there (stdin to stdout)")
+        return 0, 1
+
+    binary, msg = compile_prog("itoa.c", "itoa", chapter="chapter3")
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH3, "3-4"), check_itoa)
+    passed += p
+    failed += f
+
+    try:
+        expected = load_expected()
+    except RuntimeError as exc:
+        failed += not say(False, "limits-probe", str(exc))
+        return passed, failed
+    lo, hi = expected["int"]["int"]
+    extras = (
+        ("int-min", lo),
+        ("int-max", hi),
+        ("int-min-plus-one", lo + 1),
+        ("int-max-minus-one", hi - 1),
+    )
+    for name, n in extras:
+        inp = "{}\n".format(n)
+        wanted = "{}\n".format(n)
+        rc, out, err, run_err = run_bin(binary, inp)
+        if run_err:
+            failed += not say(False, name, run_err)
+            continue
+        if rc != 0:
+            failed += not say(False, name, "exit {} stderr={!r}".format(rc, err))
+            continue
+        ok, detail = check_itoa(out, wanted)
+        if ok:
+            passed += say(True, name)
+        else:
+            failed += not say(False, name, detail)
+    return passed, failed
+
+
+def test_itob():
+    print("\n== 3-5 itob  (int to digits in base b; hex uses a-f) ==")
+    src = os.path.join(ROOT, "src", "chapter3", "itob.c")
+    passed = failed = 0
+    if os.path.isfile(src):
+        ok, detail = check_itob_source(read(src))
+        if ok:
+            passed += say(True, "has-itob")
+        else:
+            failed += not say(False, "has-itob", detail)
+    else:
+        say(False, "compile", "missing src/chapter3/itob.c — write your program there (stdin to stdout)")
+        return 0, 1
+
+    binary, msg = compile_prog("itob.c", "itob", chapter="chapter3")
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH3, "3-5"), check_itob)
+    passed += p
+    failed += f
+
+    try:
+        expected = load_expected()
+    except RuntimeError as exc:
+        failed += not say(False, "limits-probe", str(exc))
+        return passed, failed
+    lo, hi = expected["int"]["int"]
+    extras = (
+        ("int-min-10", lo, 10),
+        ("int-max-10", hi, 10),
+        ("int-min-16", lo, 16),
+        ("int-max-16", hi, 16),
+        ("int-min-2", lo, 2),
+        ("int-max-2", hi, 2),
+    )
+    for name, n, b in extras:
+        inp = "{}\n{}\n".format(n, b)
+        wanted = "{}\n".format(format_itob(n, b))
+        rc, out, err, run_err = run_bin(binary, inp)
+        if run_err:
+            failed += not say(False, name, run_err)
+            continue
+        if rc != 0:
+            failed += not say(False, name, "exit {} stderr={!r}".format(rc, err))
+            continue
+        ok, detail = check_itob(out, wanted)
+        if ok:
+            passed += say(True, name)
+        else:
+            failed += not say(False, name, detail)
+    return passed, failed
+
+
+def test_itoaw():
+    print("\n== 3-6 itoa  (decimal digits, pad left with spaces to width w) ==")
+    src = os.path.join(ROOT, "src", "chapter3", "itoaw.c")
+    passed = failed = 0
+    if os.path.isfile(src):
+        ok, detail = check_itoaw_source(read(src))
+        if ok:
+            passed += say(True, "has-itoa")
+        else:
+            failed += not say(False, "has-itoa", detail)
+    else:
+        say(False, "compile", "missing src/chapter3/itoaw.c — write your program there (stdin to stdout)")
+        return 0, 1
+
+    binary, msg = compile_prog("itoaw.c", "itoaw", chapter="chapter3")
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH3, "3-6"), check_itoaw)
+    passed += p
+    failed += f
+
+    try:
+        expected = load_expected()
+    except RuntimeError as exc:
+        failed += not say(False, "limits-probe", str(exc))
+        return passed, failed
+    lo, hi = expected["int"]["int"]
+    extras = (
+        ("int-min-wide", lo, 16),
+        ("int-min-exact", lo, len(str(lo))),
+        ("int-max-wide", hi, 16),
+        ("int-min-narrow", lo, 1),
+    )
+    for name, n, w in extras:
+        inp = "{}\n{}\n".format(n, w)
+        wanted = "{}\n".format(format_itoaw(n, w))
+        rc, out, err, run_err = run_bin(binary, inp)
+        if run_err:
+            failed += not say(False, name, run_err)
+            continue
+        if rc != 0:
+            failed += not say(False, name, "exit {} stderr={!r}".format(rc, err))
+            continue
+        ok, detail = check_itoaw(out, wanted)
+        if ok:
+            passed += say(True, name)
+        else:
+            failed += not say(False, name, detail)
+    return passed, failed
+
+
 def main():
     known = {
         "20", "21", "22", "23", "24",
         "2-1", "2-2", "2-3", "2-4", "2-5", "2-6", "2-7", "2-8", "2-9", "2-10",
-        "3-1", "3-2", "3-3",
+        "3-1", "3-2", "3-3", "3-4", "3-5", "3-6",
     }
     want = set(sys.argv[1:]) if len(sys.argv) > 1 else set(known)
     unknown = want - known
     if unknown:
         print(
-            "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3.".format(
+            "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6.".format(
                 ", ".join(sorted(unknown))
             )
         )
@@ -699,6 +871,26 @@ def main():
         print("    both ends must be the same kind, and the left end must not come after the right")
         print("    a-b-c is abc; a leading or trailing - is copied; so is a - that is not a range")
         print("    write a function expand(s1, s2)")
+    if "3-4" in want:
+        print("  src/chapter3/itoa.c        stdin -> stdout")
+        print("    one signed decimal integer n")
+        print("    print n as decimal digits (leading - if n is negative), then a newline")
+        print("    write a function itoa(n, s); do not call sprintf")
+        print("    must work for the most negative int — the book's n = -n does not")
+    if "3-5" in want:
+        print("  src/chapter3/itob.c        stdin -> stdout")
+        print("    lines: n, b  (decimal). n is a signed int; b is the base, 2 through 16")
+        print("    print n in base b (leading - if n is negative), then a newline")
+        print("    digits 0-9 then a-f for 10-15 (lowercase); no 0x prefix")
+        print("    write a function itob(n, s, b); do not call sprintf")
+        print("    must work for the most negative int, same as itoa")
+    if "3-6" in want:
+        print("  src/chapter3/itoaw.c       stdin -> stdout")
+        print("    lines: n, w  (decimal). n is a signed int; w is the minimum field width")
+        print("    print n as decimal digits, padded with spaces on the left to at least w")
+        print("    if the number is already wider than w, print it in full — do not truncate")
+        print("    the minus sign counts toward the width; spaces go to the left of it")
+        print("    then a newline; no prompts; write itoa(n, s, w); do not call sprintf")
 
     passed = failed = 0
     runners = [
@@ -720,6 +912,9 @@ def main():
         ("3-1", test_binsearch),
         ("3-2", test_escape),
         ("3-3", test_expand),
+        ("3-4", test_itoa),
+        ("3-5", test_itob),
+        ("3-6", test_itoaw),
     ]
     for key, fn in runners:
         if key in want:

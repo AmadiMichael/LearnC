@@ -1,0 +1,9 @@
+In this complete C programming course,
+Dr. Charles Severance (aka Dr. Chuck)
+will help you understand computer
+architecture and low-level programming
+with the help of the classic C Programming
+language book written by Brian Kernighan and
+Dennis Ritchie. Toward the end Dr. Chuck
+interviews Guido van Rossum,
+the creator of Python.

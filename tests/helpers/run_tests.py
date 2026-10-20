@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile and run K&R chapter 1–3 programs against the tests."""
+"""Compile and run K&R chapter 1–4 programs against the tests."""
 
 import os
 import subprocess
@@ -10,6 +10,7 @@ BIN = os.path.join(ROOT, "bin")
 TESTS = os.path.join(ROOT, "tests", "chapter1")
 TESTS_CH2 = os.path.join(ROOT, "tests", "chapter2")
 TESTS_CH3 = os.path.join(ROOT, "tests", "chapter3")
+TESTS_CH4 = os.path.join(ROOT, "tests", "chapter4")
 HELPERS = os.path.join(ROOT, "tests", "helpers")
 
 TABSTOP = 8
@@ -43,6 +44,16 @@ from check_itob import format_base as format_itob  # noqa: E402
 from check_itoaw import check as check_itoaw
 from check_itoaw import check_source as check_itoaw_source  # noqa: E402
 from check_itoaw import format_padded as format_itoaw  # noqa: E402
+from check_strindex import check as check_strindex
+from check_strindex import check_source as check_strindex_source  # noqa: E402
+from check_atof import check as check_atof
+from check_atof import check_source as check_atof_source  # noqa: E402
+from check_calc import check as check_calc
+from check_ungets import check as check_ungets
+from check_ungets import check_source as check_ungets_source  # noqa: E402
+from check_getch import check as check_getch
+from check_getch import check_source_getch as check_getch_source  # noqa: E402
+from check_getch import check_source_getline as check_getline_source  # noqa: E402
 from check_ranges import (  # noqa: E402
     FLOAT_TYPES,
     INTEGER_TYPES,
@@ -88,6 +99,13 @@ def compile_prog(src_name, bin_name, chapter="chapter1", defines=None):
                 "itoa.c",
                 "itob.c",
                 "itoaw.c",
+                "strindex.c",
+                "atof.c",
+                "calc.c",
+                "ungets.c",
+                "getch1.c",
+                "getcheof.c",
+                "calcline.c",
             )
             else ""
         )
@@ -113,6 +131,8 @@ def compile_prog(src_name, bin_name, chapter="chapter1", defines=None):
         for name, value in defines.items():
             cmd.append("-D{}={}".format(name, value))
     cmd.extend([src, "-o", out])
+    if src_name in ("atof.c", "calc.c", "calcline.c"):
+        cmd.append("-lm")
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if proc.returncode != 0:
         err = proc.stderr.decode("utf-8", "replace").strip()
@@ -784,17 +804,160 @@ def test_itoaw():
     return passed, failed
 
 
+def test_strindex():
+    print("\n== 4-1 strindex  (rightmost occurrence of t in s) ==")
+    src = os.path.join(ROOT, "src", "chapter4", "strindex.c")
+    passed = failed = 0
+    if os.path.isfile(src):
+        ok, detail = check_strindex_source(read(src))
+        if ok:
+            passed += say(True, "has-strindex")
+        else:
+            failed += not say(False, "has-strindex", detail)
+    else:
+        say(False, "compile", "missing src/chapter4/strindex.c — write your program there (stdin to stdout)")
+        return 0, 1
+
+    binary, msg = compile_prog("strindex.c", "strindex", chapter="chapter4")
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH4, "4-1"), check_strindex)
+    return passed + p, failed + f
+
+
+def test_atof():
+    print("\n== 4-2 atof  (string to double; handle e / E exponents) ==")
+    src = os.path.join(ROOT, "src", "chapter4", "atof.c")
+    passed = failed = 0
+    if os.path.isfile(src):
+        ok, detail = check_atof_source(read(src))
+        if ok:
+            passed += say(True, "has-atof")
+        else:
+            failed += not say(False, "has-atof", detail)
+    else:
+        say(False, "compile", "missing src/chapter4/atof.c — write your program there (stdin to stdout)")
+        return 0, 1
+
+    binary, msg = compile_prog("atof.c", "atof", chapter="chapter4")
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH4, "4-2"), check_atof)
+    return passed + p, failed + f
+
+
+def _named_c(src_name, bin_name, folder, check_fn, source_fn=None, source_label=None):
+    src = os.path.join(ROOT, "src", "chapter4", src_name)
+    passed = failed = 0
+    if source_fn is not None:
+        if os.path.isfile(src):
+            ok, detail = source_fn(read(src))
+            if ok:
+                passed += say(True, source_label)
+            else:
+                failed += not say(False, source_label, detail)
+        else:
+            say(False, "compile", "missing src/chapter4/{} — write your program there (stdin to stdout)".format(src_name))
+            return 0, 1
+    binary, msg = compile_prog(src_name, bin_name, chapter="chapter4")
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    p, f = _run_inout_dir(binary, folder, check_fn)
+    return passed + p, failed + f
+
+
+def test_calc():
+    print("\n== 4-3 calc  (RPN: + - * / % and negative numbers) ==")
+    return _named_c("calc.c", "calc", os.path.join(TESTS_CH4, "4-3"), check_calc)
+
+
+def test_calcstack():
+    print("\n== 4-4 calc  (P peek, D dup, S swap, C clear) ==")
+    return _named_c("calc.c", "calc", os.path.join(TESTS_CH4, "4-4"), check_calc)
+
+
+def test_calcmath():
+    print("\n== 4-5 calc  (sin, exp, pow from math.h) ==")
+    return _named_c("calc.c", "calc", os.path.join(TESTS_CH4, "4-5"), check_calc)
+
+
+def test_calcvar():
+    print("\n== 4-6 calc  (a-z variables, = assign, _ last printed) ==")
+    return _named_c("calc.c", "calc", os.path.join(TESTS_CH4, "4-6"), check_calc)
+
+
+def test_ungets():
+    print("\n== 4-7 ungets  (push a string back for getch) ==")
+    return _named_c(
+        "ungets.c",
+        "ungets",
+        os.path.join(TESTS_CH4, "4-7"),
+        check_ungets,
+        check_ungets_source,
+        "has-ungets",
+    )
+
+
+def test_getch1():
+    print("\n== 4-8 getch  (at most one character of pushback) ==")
+    return _named_c(
+        "getch1.c",
+        "getch1",
+        os.path.join(TESTS_CH4, "4-8"),
+        check_getch,
+        check_getch_source,
+        "has-getch",
+    )
+
+
+def test_getcheof():
+    print("\n== 4-9 getch  (pushed-back EOF stays EOF) ==")
+    return _named_c(
+        "getcheof.c",
+        "getcheof",
+        os.path.join(TESTS_CH4, "4-9"),
+        check_getch,
+        check_getch_source,
+        "has-getch",
+    )
+
+
+def test_calcline():
+    print("\n== 4-10 calc  (same RPN, read lines with getline; no getch) ==")
+    src = os.path.join(ROOT, "src", "chapter4", "calcline.c")
+    passed = failed = 0
+    if os.path.isfile(src):
+        ok, detail = check_getline_source(read(src))
+        if ok:
+            passed += say(True, "has-getline")
+        else:
+            failed += not say(False, "has-getline", detail)
+    else:
+        say(False, "compile", "missing src/chapter4/calcline.c — write your program there (stdin to stdout)")
+        return 0, 1
+    binary, msg = compile_prog("calcline.c", "calcline", chapter="chapter4")
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH4, "4-3"), check_calc)
+    return passed + p, failed + f
+
+
 def main():
     known = {
         "20", "21", "22", "23", "24",
         "2-1", "2-2", "2-3", "2-4", "2-5", "2-6", "2-7", "2-8", "2-9", "2-10",
         "3-1", "3-2", "3-3", "3-4", "3-5", "3-6",
+        "4-1", "4-2", "4-3", "4-4", "4-5", "4-6", "4-7", "4-8", "4-9", "4-10",
     }
     want = set(sys.argv[1:]) if len(sys.argv) > 1 else set(known)
     unknown = want - known
     if unknown:
         print(
-            "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6.".format(
+            "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-9 4-10.".format(
                 ", ".join(sorted(unknown))
             )
         )
@@ -891,6 +1054,58 @@ def main():
         print("    if the number is already wider than w, print it in full — do not truncate")
         print("    the minus sign counts toward the width; spaces go to the left of it")
         print("    then a newline; no prompts; write itoa(n, s, w); do not call sprintf")
+    if "4-1" in want:
+        print("  src/chapter4/strindex.c    stdin -> stdout")
+        print("    line 1 is s, line 2 is t (newlines are not part of the strings; spaces are)")
+        print("    print the 0-based index of the rightmost occurrence of t in s, or -1")
+        print("    write a function strindex(s, t); do not call strstr")
+    if "4-2" in want:
+        print("  src/chapter4/atof.c        stdin -> stdout")
+        print("    one number on a line (optional leading spaces, optional + or -)")
+        print("    digits, optional fraction, then optional e or E and an optionally signed exponent")
+        print("    print that value as a floating-point number, then a newline (%.8g is enough)")
+        print("    write a function atof(s) that returns double; do not call the library atof / strtod")
+    if "4-3" in want:
+        print("  src/chapter4/calc.c        stdin -> stdout  (grow this file for 4-4, 4-5, 4-6)")
+        print("    reverse Polish: whitespace-separated tokens, then a newline")
+        print("    newline pops and prints the top of the stack (%.8g; a leading tab is fine)")
+        print("    operators + - * / %   (2 4 / is 0.5; 7 3 % is 1)")
+        print("    a number may start with -: token -2 is negative two; token - by itself is subtract")
+        print("    do not pop an empty stack in these tests")
+    if "4-4" in want:
+        print("  src/chapter4/calc.c        same calculator, extra commands (uppercase, one letter):")
+        print("    P  print the top without popping")
+        print("    D  duplicate the top")
+        print("    S  swap the top two")
+        print("    C  clear the stack")
+    if "4-5" in want:
+        print("  src/chapter4/calc.c        same calculator, extra word commands (math.h is allowed):")
+        print("    sin  exp  each pop one argument")
+        print("    pow  x y pow means x to the power y  (2 3 pow is 8)")
+    if "4-6" in want:
+        print("  src/chapter4/calc.c        same calculator, variables:")
+        print("    a single letter a-z pushes that variable (starts at 0)")
+        print("    =  pops the copy pushed by the name, stores the next value into the most")
+        print("       recently named variable, and leaves that value on the stack")
+        print("       example: 3 a =   stores 3 in a and leaves 3 on the stack")
+        print("    _  pushes the most recently printed value (from newline or P)")
+    if "4-7" in want:
+        print("  src/chapter4/ungets.c      stdin -> stdout")
+        print("    read stdin into a string s, ungets(s), then copy getch() to stdout until EOF")
+        print("    output should match the input; write ungets (it may call ungetch)")
+    if "4-8" in want:
+        print("  src/chapter4/getch1.c      stdin -> stdout")
+        print("    copy stdin to stdout using getch/ungetch; only one character of pushback")
+        print("    output should match the input")
+    if "4-9" in want:
+        print("  src/chapter4/getcheof.c    stdin -> stdout")
+        print("    copy stdin to stdout with getch; ungetch(EOF) must still yield EOF from getch")
+        print("    output should match the input; the program must stop (not loop on EOF)")
+        print("    store the pushback in an int, not a char")
+    if "4-10" in want:
+        print("  src/chapter4/calcline.c    stdin -> stdout")
+        print("    same RPN as 4-3, but read a whole line with getline (no getch/ungetch)")
+        print("    same print rule: newline / end of line prints the top with %.8g")
 
     passed = failed = 0
     runners = [
@@ -915,6 +1130,16 @@ def main():
         ("3-4", test_itoa),
         ("3-5", test_itob),
         ("3-6", test_itoaw),
+        ("4-1", test_strindex),
+        ("4-2", test_atof),
+        ("4-3", test_calc),
+        ("4-4", test_calcstack),
+        ("4-5", test_calcmath),
+        ("4-6", test_calcvar),
+        ("4-7", test_ungets),
+        ("4-8", test_getch1),
+        ("4-9", test_getcheof),
+        ("4-10", test_calcline),
     ]
     for key, fn in runners:
         if key in want:

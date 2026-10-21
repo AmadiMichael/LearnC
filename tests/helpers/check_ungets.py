@@ -1,4 +1,4 @@
-"""Exercise 4-7: require ungets(); compare echoed stdin."""
+"""Exercise 4-7: require ungets(); compare replayed leftover input."""
 
 from pretty import mismatch
 
@@ -55,8 +55,11 @@ def check(got, wanted):
     notes = []
     if got.strip("\n") == wanted.strip("\n"):
         notes.append("the characters are right except for a newline at the edge.")
+    notes.append(
+        "stdout is s, then the leftover stdin after the one thrown-away getch."
+    )
     return False, mismatch(
-        "stdout should be the input after ungets pushed it back and getch read it.",
+        "stdout is not the string ungets pushed back, followed by the leftover input.",
         got=got,
         wanted=wanted,
         tabstop=8,

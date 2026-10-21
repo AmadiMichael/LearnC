@@ -1,4 +1,6 @@
-"""Identity stdin→stdout for getch / ungetch programs."""
+"""Source and stdout checks for getch / ungetch / getline exercises."""
+
+import re
 
 from pretty import mismatch
 
@@ -45,13 +47,24 @@ def _has_ident(src, name):
 
 def check_source_getline(src):
     if not (_has_ident(src, "getline") or _has_ident(src, "getLine")):
-        return False, "the exercise asks you to read lines with getline (getch/ungetch should go)."
+        return False, "the exercise asks you to read lines with getline."
+    if _has_ident(src, "getch") or _has_ident(src, "ungetch"):
+        return False, "read a whole line with getline; do not use getch or ungetch."
     return True, ""
 
 
 def check_source_getch(src):
     if not _has_ident(src, "getch") or not _has_ident(src, "ungetch"):
         return False, "write getch and ungetch."
+    return True, ""
+
+
+def check_source_one_pushback(src):
+    ok, msg = check_source_getch(src)
+    if not ok:
+        return ok, msg
+    if re.search(r"\b(buf|pushback|ungetbuf|pb)\s*\[", src):
+        return False, "only one character of pushback; store it in a single variable, not an array."
     return True, ""
 
 

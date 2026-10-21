@@ -52,8 +52,13 @@ from check_calc import check as check_calc
 from check_ungets import check as check_ungets
 from check_ungets import check_source as check_ungets_source  # noqa: E402
 from check_getch import check as check_getch
-from check_getch import check_source_getch as check_getch_source  # noqa: E402
 from check_getch import check_source_getline as check_getline_source  # noqa: E402
+from check_getch import check_source_one_pushback  # noqa: E402
+from check_getop import check as check_bookcalc  # noqa: E402
+from check_getop import check_source as check_getop_source  # noqa: E402
+from check_recur import check as check_reverse  # noqa: E402
+from check_recur import check_itoa_source as check_itoar_source  # noqa: E402
+from check_recur import check_reverse_source  # noqa: E402
 from check_ranges import (  # noqa: E402
     FLOAT_TYPES,
     INTEGER_TYPES,
@@ -104,8 +109,8 @@ def compile_prog(src_name, bin_name, chapter="chapter1", defines=None):
                 "calc.c",
                 "ungets.c",
                 "getch1.c",
-                "getcheof.c",
                 "calcline.c",
+                "reverse.c",
             )
             else ""
         )
@@ -132,6 +137,25 @@ def compile_prog(src_name, bin_name, chapter="chapter1", defines=None):
             cmd.append("-D{}={}".format(name, value))
     cmd.extend([src, "-o", out])
     if src_name in ("atof.c", "calc.c", "calcline.c"):
+        cmd.append("-lm")
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if proc.returncode != 0:
+        err = proc.stderr.decode("utf-8", "replace").strip()
+        return None, "compile failed:\n{}".format(err)
+    return out, ""
+
+
+def compile_sources(sources, bin_name, include_dir=None, link_math=False):
+    if not sources:
+        return None, "no .c files"
+    os.makedirs(BIN, exist_ok=True)
+    out = os.path.join(BIN, bin_name)
+    cmd = ["gcc", "-std=c99", "-Wall", "-Wextra"]
+    if include_dir:
+        cmd.extend(["-I", include_dir])
+    cmd.extend(sources)
+    cmd.extend(["-o", out])
+    if link_math:
         cmd.append("-lm")
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if proc.returncode != 0:
@@ -890,7 +914,7 @@ def test_calcvar():
 
 
 def test_ungets():
-    print("\n== 4-7 ungets  (push a string back for getch) ==")
+    print("\n== 4-7 ungets  (push a whole string back onto the input) ==")
     return _named_c(
         "ungets.c",
         "ungets",
@@ -908,20 +932,8 @@ def test_getch1():
         "getch1",
         os.path.join(TESTS_CH4, "4-8"),
         check_getch,
-        check_getch_source,
-        "has-getch",
-    )
-
-
-def test_getcheof():
-    print("\n== 4-9 getch  (pushed-back EOF stays EOF) ==")
-    return _named_c(
-        "getcheof.c",
-        "getcheof",
-        os.path.join(TESTS_CH4, "4-9"),
-        check_getch,
-        check_getch_source,
-        "has-getch",
+        check_source_one_pushback,
+        "one-pushback",
     )
 
 
@@ -942,7 +954,121 @@ def test_calcline():
     if binary is None:
         say(False, "compile", msg)
         return passed, failed + 1
-    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH4, "4-3"), check_calc)
+    for folder in ("4-3", "4-4", "4-5", "4-6", "4-10"):
+        p, f = _run_inout_dir(binary, os.path.join(TESTS_CH4, folder), check_calc)
+        passed += p
+        failed += f
+    return passed, failed
+
+
+def test_getop():
+    print("\n== 4-11 calc  (book RPN: + - * /) ==")
+    folder = os.path.join(ROOT, "src", "chapter4", "4-11")
+    if not os.path.isdir(folder):
+        say(
+            False,
+            "compile",
+            "missing src/chapter4/4-11/ — put your .c files in that folder",
+        )
+        return 0, 1
+    sources = sorted(
+        os.path.join(folder, name)
+        for name in os.listdir(folder)
+        if name.endswith(".c")
+    )
+    if not sources:
+        say(
+            False,
+            "compile",
+            "missing src/chapter4/4-11/*.c — put your .c files in that folder",
+        )
+        return 0, 1
+    texts = [read(path) for path in sources]
+    for name in sorted(os.listdir(folder)):
+        if name.endswith(".h"):
+            texts.append(read(os.path.join(folder, name)))
+    passed = failed = 0
+    ok, detail = check_getop_source("\n".join(texts))
+    if ok:
+        passed += say(True, "static-getop")
+    else:
+        failed += not say(False, "static-getop", detail)
+    binary, msg = compile_sources(sources, "calc411", include_dir=folder, link_math=False)
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH4, "4-11"), check_bookcalc)
+    return passed + p, failed + f
+
+
+def test_itoar():
+    print("\n== 4-12 itoa  (recursive; must work for the most negative int) ==")
+    src = os.path.join(ROOT, "src", "chapter4", "itoa.c")
+    passed = failed = 0
+    if os.path.isfile(src):
+        ok, detail = check_itoar_source(read(src))
+        if ok:
+            passed += say(True, "recursive-itoa")
+        else:
+            failed += not say(False, "recursive-itoa", detail)
+    else:
+        say(False, "compile", "missing src/chapter4/itoa.c — write your program there (stdin to stdout)")
+        return 0, 1
+    binary, msg = compile_prog("itoa.c", "itoa4", chapter="chapter4")
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH4, "4-12"), check_itoa)
+    passed += p
+    failed += f
+    try:
+        expected = load_expected()
+    except RuntimeError as exc:
+        failed += not say(False, "limits-probe", str(exc))
+        return passed, failed
+    lo, hi = expected["int"]["int"]
+    extras = (
+        ("int-min", lo),
+        ("int-max", hi),
+        ("int-min-plus-one", lo + 1),
+        ("int-max-minus-one", hi - 1),
+    )
+    for name, n in extras:
+        inp = "{}\n".format(n)
+        wanted = "{}\n".format(n)
+        rc, out, err, run_err = run_bin(binary, inp)
+        if run_err:
+            failed += not say(False, name, run_err)
+            continue
+        if rc != 0:
+            failed += not say(False, name, "exit {} stderr={!r}".format(rc, err))
+            continue
+        ok, detail = check_itoa(out, wanted)
+        if ok:
+            passed += say(True, name)
+        else:
+            failed += not say(False, name, detail)
+    return passed, failed
+
+
+def test_reverse():
+    print("\n== 4-13 reverse  (recursive, in place) ==")
+    src = os.path.join(ROOT, "src", "chapter4", "reverse.c")
+    passed = failed = 0
+    if os.path.isfile(src):
+        ok, detail = check_reverse_source(read(src))
+        if ok:
+            passed += say(True, "recursive-reverse")
+        else:
+            failed += not say(False, "recursive-reverse", detail)
+    else:
+        say(False, "compile", "missing src/chapter4/reverse.c — write your program there (stdin to stdout)")
+        return 0, 1
+    binary, msg = compile_prog("reverse.c", "reverse", chapter="chapter4")
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH4, "4-13"), check_reverse)
     return passed + p, failed + f
 
 
@@ -951,13 +1077,14 @@ def main():
         "20", "21", "22", "23", "24",
         "2-1", "2-2", "2-3", "2-4", "2-5", "2-6", "2-7", "2-8", "2-9", "2-10",
         "3-1", "3-2", "3-3", "3-4", "3-5", "3-6",
-        "4-1", "4-2", "4-3", "4-4", "4-5", "4-6", "4-7", "4-8", "4-9", "4-10",
+        "4-1", "4-2", "4-3", "4-4", "4-5", "4-6", "4-7", "4-8", "4-10", "4-11",
+        "4-12", "4-13",
     }
     want = set(sys.argv[1:]) if len(sys.argv) > 1 else set(known)
     unknown = want - known
     if unknown:
         print(
-            "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-9 4-10.".format(
+            "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-10 4-11 4-12 4-13.".format(
                 ", ".join(sorted(unknown))
             )
         )
@@ -1091,21 +1218,46 @@ def main():
         print("    _  pushes the most recently printed value (from newline or P)")
     if "4-7" in want:
         print("  src/chapter4/ungets.c      stdin -> stdout")
-        print("    read stdin into a string s, ungets(s), then copy getch() to stdout until EOF")
-        print("    output should match the input; write ungets (it may call ungetch)")
+        print("    line 1 is the string s (that newline is not part of s)")
+        print("    the rest of stdin is leftover input")
+        print("    read line 1 without getch; getch once and throw that character away")
+        print("    then ungets(s); then copy getch() to stdout until EOF")
+        print("    stdout is s, then the leftover without that one thrown-away character")
+        print("    write ungets (it may call ungetch); this file only, not calc.c")
     if "4-8" in want:
         print("  src/chapter4/getch1.c      stdin -> stdout")
-        print("    copy stdin to stdout using getch/ungetch; only one character of pushback")
-        print("    output should match the input")
-    if "4-9" in want:
-        print("  src/chapter4/getcheof.c    stdin -> stdout")
-        print("    copy stdin to stdout with getch; ungetch(EOF) must still yield EOF from getch")
-        print("    output should match the input; the program must stop (not loop on EOF)")
-        print("    store the pushback in an int, not a char")
+        print("    copy stdin to stdout through getch / ungetch")
+        print("    for each character from getch: ungetch it, then ungetch '#' , then getch and print")
+        print("    only one character of pushback: the second ungetch must not replace the first")
+        print("    stdout must match stdin; this file only, not calc.c")
     if "4-10" in want:
         print("  src/chapter4/calcline.c    stdin -> stdout")
-        print("    same RPN as 4-3, but read a whole line with getline (no getch/ungetch)")
+        print("    same calculator as 4-3 through 4-6, but read a whole line with getline")
+        print("    no getch/ungetch; this file only, not calc.c")
         print("    same print rule: newline / end of line prints the top with %.8g")
+        print("    a line that ends at EOF, with no newline, still prints the top")
+        print("    sin, exp, and pow at that end are still those commands")
+    if "4-11" in want:
+        print("  src/chapter4/4-11/         the book's calculator, .c files compiled together")
+        print("    operators +  -  *  /     a newline prints a tab and the top with %.8g")
+        print("    - is always subtraction; % and letters are unknown commands")
+        print("    getop reads one character past a number and uses that character next")
+        print("    keep that character in one static variable inside getop")
+        print("    getop must not call ungetch, directly or through another function")
+        print("    a number may be followed immediately by an operator or a newline")
+    if "4-12" in want:
+        print("  src/chapter4/itoa.c        stdin -> stdout")
+        print("    one signed decimal integer n")
+        print("    print n as decimal digits (leading - if n is negative), then a newline")
+        print("    write itoa(n, s) that stores the digits in s by calling a recursive routine")
+        print("    do not print from itoa, and do not call sprintf")
+        print("    s must hold every int, including the most negative, the sign, and the final '\\0'")
+    if "4-13" in want:
+        print("  src/chapter4/reverse.c     stdin -> stdout")
+        print("    stdin is the string s. The newline that ends it is not part of s")
+        print("    if there is no newline, s is all of stdin")
+        print("    reverse s in place by calling a recursive routine reverse(s)")
+        print("    print the reversed characters, then a newline")
 
     passed = failed = 0
     runners = [
@@ -1138,8 +1290,10 @@ def main():
         ("4-6", test_calcvar),
         ("4-7", test_ungets),
         ("4-8", test_getch1),
-        ("4-9", test_getcheof),
         ("4-10", test_calcline),
+        ("4-11", test_getop),
+        ("4-12", test_itoar),
+        ("4-13", test_reverse),
     ]
     for key, fn in runners:
         if key in want:

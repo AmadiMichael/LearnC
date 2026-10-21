@@ -199,7 +199,7 @@ void empty(void) {
 }
 
 
-int getop(char s[]) {
+int getop(char s[MAX_OP_SIZE]) {
     int sIndex = 0;
     int c;
 
@@ -268,7 +268,7 @@ void writenum(char s[MAX_OP_SIZE], int sIndex) {
 }
 
 
-char buf[MAX_BUF_SIZE];
+int buf[MAX_BUF_SIZE];
 int bufNextPointer = 0;
 
 int getch() {

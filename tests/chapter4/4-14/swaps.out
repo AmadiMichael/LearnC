@@ -1,0 +1,14 @@
+int 2 1
+neg 0 -5
+same 7 7
+twice 3 9
+array 8 4
+chain 2 3 1
+char Z A
+double -3.5 1.25
+float 8 0.5
+long -100000 100000
+unsigned 99 42
+ptr 20 10
+struct 3 4.5 1 2.5
+limits ok

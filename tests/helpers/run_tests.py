@@ -59,6 +59,8 @@ from check_getop import check_source as check_getop_source  # noqa: E402
 from check_recur import check as check_reverse  # noqa: E402
 from check_recur import check_itoa_source as check_itoar_source  # noqa: E402
 from check_recur import check_reverse_source  # noqa: E402
+from check_swap import check as check_swap  # noqa: E402
+from check_swap import check_source as check_swap_source  # noqa: E402
 from check_ranges import (  # noqa: E402
     FLOAT_TYPES,
     INTEGER_TYPES,
@@ -1051,6 +1053,46 @@ def test_itoar():
     return passed, failed
 
 
+def test_swap():
+    print("\n== 4-14 swap  (macro swap(t, x, y)) ==")
+    header = os.path.join(ROOT, "src", "chapter4", "swap.h")
+    passed = failed = 0
+    if not os.path.isfile(header):
+        say(
+            False,
+            "compile",
+            "missing src/chapter4/swap.h — define the macro swap(t, x, y) there",
+        )
+        return 0, 1
+    ok, detail = check_swap_source(read(header))
+    if ok:
+        passed += say(True, "macro-swap")
+    else:
+        failed += not say(False, "macro-swap", detail)
+    binary, msg = compile_sources(
+        [os.path.join(HELPERS, "swap_driver.c")],
+        "swap",
+        include_dir=os.path.join(ROOT, "src", "chapter4"),
+    )
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    rc, out, err, run_err = run_bin(binary, "")
+    if run_err:
+        return passed, failed + (not say(False, "swaps", run_err))
+    if rc != 0:
+        return passed, failed + (
+            not say(False, "swaps", "exit {} stderr={!r}".format(rc, err))
+        )
+    wanted = read(os.path.join(TESTS_CH4, "4-14", "swaps.out"))
+    ok, detail = check_swap(out, wanted)
+    if ok:
+        passed += say(True, "swaps")
+    else:
+        failed += not say(False, "swaps", detail)
+    return passed, failed
+
+
 def test_reverse():
     print("\n== 4-13 reverse  (recursive, in place) ==")
     src = os.path.join(ROOT, "src", "chapter4", "reverse.c")
@@ -1078,13 +1120,13 @@ def main():
         "2-1", "2-2", "2-3", "2-4", "2-5", "2-6", "2-7", "2-8", "2-9", "2-10",
         "3-1", "3-2", "3-3", "3-4", "3-5", "3-6",
         "4-1", "4-2", "4-3", "4-4", "4-5", "4-6", "4-7", "4-8", "4-10", "4-11",
-        "4-12", "4-13",
+        "4-12", "4-13", "4-14",
     }
     want = set(sys.argv[1:]) if len(sys.argv) > 1 else set(known)
     unknown = want - known
     if unknown:
         print(
-            "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-10 4-11 4-12 4-13.".format(
+            "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-10 4-11 4-12 4-13 4-14.".format(
                 ", ".join(sorted(unknown))
             )
         )
@@ -1258,6 +1300,11 @@ def main():
         print("    if there is no newline, s is all of stdin")
         print("    reverse s in place by calling a recursive routine reverse(s)")
         print("    print the reversed characters, then a newline")
+    if "4-14" in want:
+        print("  src/chapter4/swap.h")
+        print("    define a macro swap(t, x, y) that exchanges two arguments of type t")
+        print("    declare the temporary inside a block, and give it type t")
+        print("    there is no stdin. The tests call swap and print the values afterward")
 
     passed = failed = 0
     runners = [
@@ -1294,6 +1341,7 @@ def main():
         ("4-11", test_getop),
         ("4-12", test_itoar),
         ("4-13", test_reverse),
+        ("4-14", test_swap),
     ]
     for key, fn in runners:
         if key in want:

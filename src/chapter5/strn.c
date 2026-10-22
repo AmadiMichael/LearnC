@@ -29,14 +29,14 @@ char *strncat(char *s, char *t, int n) {
 
     while(n > 0) {
         if (*t == '\0') {
-            *s++ = *t;
+            *s = '\0';
+            break;
         } else {
             *s++ = *t++;
         }
 
         --n;
     }
-    if (*--s != '\0') *++s = '\0';
 
     return ss;
 }

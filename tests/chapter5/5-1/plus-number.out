@@ -1,0 +1,3 @@
+return '\n'
+pn 123
+left "\n"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile and run K&R chapter 1–4 programs against the tests."""
+"""Compile and run K&R chapter 1–5 programs against the tests."""
 
 import os
 import subprocess
@@ -11,6 +11,7 @@ TESTS = os.path.join(ROOT, "tests", "chapter1")
 TESTS_CH2 = os.path.join(ROOT, "tests", "chapter2")
 TESTS_CH3 = os.path.join(ROOT, "tests", "chapter3")
 TESTS_CH4 = os.path.join(ROOT, "tests", "chapter4")
+TESTS_CH5 = os.path.join(ROOT, "tests", "chapter5")
 HELPERS = os.path.join(ROOT, "tests", "helpers")
 
 TABSTOP = 8
@@ -61,6 +62,16 @@ from check_recur import check_itoa_source as check_itoar_source  # noqa: E402
 from check_recur import check_reverse_source  # noqa: E402
 from check_swap import check as check_swap  # noqa: E402
 from check_swap import check_source as check_swap_source  # noqa: E402
+from check_getint import check as check_getint  # noqa: E402
+from check_getint import check_source as check_getint_source  # noqa: E402
+from check_getfloat import check as check_getfloat  # noqa: E402
+from check_getfloat import check_source as check_getfloat_source  # noqa: E402
+from check_strcat import check as check_strcat  # noqa: E402
+from check_strcat import check_source as check_strcat_source  # noqa: E402
+from check_strend import check as check_strend  # noqa: E402
+from check_strend import check_source as check_strend_source  # noqa: E402
+from check_strn import check as check_strn  # noqa: E402
+from check_strn import check_source as check_strn_source  # noqa: E402
 from check_ranges import (  # noqa: E402
     FLOAT_TYPES,
     INTEGER_TYPES,
@@ -113,6 +124,8 @@ def compile_prog(src_name, bin_name, chapter="chapter1", defines=None):
                 "getch1.c",
                 "calcline.c",
                 "reverse.c",
+                "strcat.c",
+                "strend.c",
             )
             else ""
         )
@@ -137,6 +150,8 @@ def compile_prog(src_name, bin_name, chapter="chapter1", defines=None):
     if defines:
         for name, value in defines.items():
             cmd.append("-D{}={}".format(name, value))
+    if src_name == "strcat.c":
+        cmd.append("-fno-builtin")
     cmd.extend([src, "-o", out])
     if src_name in ("atof.c", "calc.c", "calcline.c"):
         cmd.append("-lm")
@@ -147,12 +162,14 @@ def compile_prog(src_name, bin_name, chapter="chapter1", defines=None):
     return out, ""
 
 
-def compile_sources(sources, bin_name, include_dir=None, link_math=False):
+def compile_sources(sources, bin_name, include_dir=None, link_math=False, extra=None):
     if not sources:
         return None, "no .c files"
     os.makedirs(BIN, exist_ok=True)
     out = os.path.join(BIN, bin_name)
     cmd = ["gcc", "-std=c99", "-Wall", "-Wextra"]
+    if extra:
+        cmd.extend(extra)
     if include_dir:
         cmd.extend(["-I", include_dir])
     cmd.extend(sources)
@@ -1114,6 +1131,190 @@ def test_reverse():
     return passed + p, failed + f
 
 
+def test_getint():
+    print("\n== 5-1 getint  (book getint: push back a + or - with no digit) ==")
+    src = os.path.join(ROOT, "src", "chapter5", "getint.c")
+    passed = failed = 0
+    if not os.path.isfile(src):
+        say(
+            False,
+            "compile",
+            "missing src/chapter5/getint.c — define getint and getch there, with no main",
+        )
+        return 0, 1
+    ok, detail = check_getint_source(read(src))
+    if ok:
+        passed += say(True, "getint")
+    else:
+        failed += not say(False, "getint", detail)
+    binary, msg = compile_sources(
+        [src, os.path.join(HELPERS, "getint_driver.c")],
+        "getint",
+    )
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH5, "5-1"), check_getint)
+    return passed + p, failed + f
+
+
+def test_getfloat():
+    print("\n== 5-2 getfloat  (floating-point analog of getint) ==")
+    src = os.path.join(ROOT, "src", "chapter5", "getfloat.c")
+    getch_src = os.path.join(ROOT, "src", "chapter5", "getint.c")
+    passed = failed = 0
+    if not os.path.isfile(src):
+        say(
+            False,
+            "compile",
+            "missing src/chapter5/getfloat.c — define int getfloat(float *pn) there, with no main",
+        )
+        return 0, 1
+    if not os.path.isfile(getch_src):
+        say(False, "compile", "missing src/chapter5/getint.c — getfloat uses its getch and ungetch")
+        return 0, 1
+    ok, detail = check_getfloat_source(read(src))
+    if ok:
+        passed += say(True, "getfloat")
+    else:
+        failed += not say(False, "getfloat", detail)
+    binary, msg = compile_sources(
+        [getch_src, src, os.path.join(HELPERS, "getfloat_driver.c")],
+        "getfloat",
+    )
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH5, "5-2"), check_getfloat)
+    return passed + p, failed + f
+
+
+def test_strcat():
+    print("\n== 5-3 strcat  (pointer version: copy t onto the end of s) ==")
+    src = os.path.join(ROOT, "src", "chapter5", "strcat.c")
+    passed = failed = 0
+    if os.path.isfile(src) and os.path.getsize(src) > 0:
+        ok, detail = check_strcat_source(read(src))
+        if ok:
+            passed += say(True, "pointer-strcat")
+        else:
+            failed += not say(False, "pointer-strcat", detail)
+    binary, msg = compile_prog("strcat.c", "strcat5", chapter="chapter5")
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH5, "5-3"), check_strcat)
+    return passed + p, failed + f
+
+
+def test_strend():
+    print("\n== 5-4 strend  (1 if t occurs at the end of s, else 0) ==")
+    src = os.path.join(ROOT, "src", "chapter5", "strend.c")
+    passed = failed = 0
+    if os.path.isfile(src) and os.path.getsize(src) > 0:
+        ok, detail = check_strend_source(read(src))
+        if ok:
+            passed += say(True, "strend")
+        else:
+            failed += not say(False, "strend", detail)
+    binary, msg = compile_prog("strend.c", "strend", chapter="chapter5")
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH5, "5-4"), check_strend)
+    return passed + p, failed + f
+
+
+def compile_strn(src):
+    """Compile the three functions plus the test driver. A main in strn.c is left unused."""
+    if not os.path.isfile(src):
+        return None, "missing src/chapter5/strn.c — define strncpy, strncat, and strncmp there"
+    os.makedirs(BIN, exist_ok=True)
+    user_obj = os.path.join(BIN, "strn_user.o")
+    driver_obj = os.path.join(BIN, "strn_driver.o")
+    out = os.path.join(BIN, "strn5")
+    driver = os.path.join(HELPERS, "strn_driver.c")
+    steps = [
+        [
+            "gcc", "-std=c99", "-Wall", "-Wextra", "-fno-builtin",
+            "-Dmain=student_main", "-c", src, "-o", user_obj,
+        ],
+        [
+            "gcc", "-std=c99", "-Wall", "-Wextra", "-fno-builtin",
+            "-c", driver, "-o", driver_obj,
+        ],
+        ["gcc", user_obj, driver_obj, "-o", out],
+    ]
+    for cmd in steps:
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode != 0:
+            err = proc.stderr.decode("utf-8", "replace").strip()
+            return None, "compile failed:\n{}".format(err)
+    return out, ""
+
+
+def _strn_selected(case, filters, exact):
+    for item in filters:
+        if case == item:
+            return True
+        if item not in exact and case.startswith(item + "-"):
+            return True
+    return False
+
+
+def test_strn(filters=None):
+    filters = list(filters or [])
+    folder = os.path.join(TESTS_CH5, "5-5")
+    cases = sorted(n[: -len(".in")] for n in os.listdir(folder) if n.endswith(".in"))
+    exact = set(cases)
+    if filters:
+        cases = [case for case in cases if _strn_selected(case, filters, exact)]
+    title = ", ".join(filters) if filters else "at most n characters"
+    print("\n== 5-5 {} ==".format(title))
+    if filters and not cases:
+        say(
+            False,
+            "filter",
+            "no 5-5 test matches {}. Use strncpy, strncat, strncmp, or a case name like strncpy-pad.".format(
+                ", ".join(filters)
+            ),
+        )
+        return 0, 1
+    funcs = []
+    for case in cases:
+        name = case.split("-", 1)[0]
+        if name not in funcs:
+            funcs.append(name)
+    src = os.path.join(ROOT, "src", "chapter5", "strn.c")
+    passed = failed = 0
+    if os.path.isfile(src) and os.path.getsize(src) > 0:
+        ok, detail = check_strn_source(read(src), funcs)
+        if ok:
+            passed += say(True, "signatures")
+        else:
+            failed += not say(False, "signatures", detail)
+    binary, msg = compile_strn(src)
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    for case in cases:
+        inp = read(os.path.join(folder, case + ".in"))
+        wanted = read(os.path.join(folder, case + ".out"))
+        rc, out, err, run_err = run_bin(binary, inp)
+        if run_err:
+            failed += not say(False, case, run_err)
+            continue
+        if rc != 0:
+            failed += not say(False, case, "exit {} stderr={!r}".format(rc, err))
+            continue
+        ok, detail = check_strn(out, wanted, inp)
+        if ok:
+            passed += say(True, case)
+        else:
+            failed += not say(False, case, detail)
+    return passed, failed
+
+
 def main():
     known = {
         "20", "21", "22", "23", "24",
@@ -1121,16 +1322,27 @@ def main():
         "3-1", "3-2", "3-3", "3-4", "3-5", "3-6",
         "4-1", "4-2", "4-3", "4-4", "4-5", "4-6", "4-7", "4-8", "4-10", "4-11",
         "4-12", "4-13", "4-14",
+        "5-1", "5-2", "5-3", "5-4", "5-5",
     }
-    want = set(sys.argv[1:]) if len(sys.argv) > 1 else set(known)
-    unknown = want - known
-    if unknown:
-        print(
-            "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-10 4-11 4-12 4-13 4-14.".format(
-                ", ".join(sorted(unknown))
+    args = sys.argv[1:]
+    want = set(a for a in args if a in known) if args else set(known)
+    filters = [a for a in args if a not in known]
+    if filters:
+        folder = os.path.join(TESTS_CH5, "5-5")
+        cases = [n[: -len(".in")] for n in os.listdir(folder) if n.endswith(".in")]
+        exact = set(cases)
+        unknown = [a for a in filters if not any(_strn_selected(case, [a], exact) for case in cases)]
+        if unknown:
+            print(
+                "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-10 4-11 4-12 4-13 4-14 5-1 5-2 5-3 5-4 5-5.".format(
+                    ", ".join(unknown)
+                )
             )
-        )
-        return 2
+            print("For 5-5, add strncpy, strncat, strncmp, or a case name like strncpy-pad.")
+            return 2
+        want.add("5-5")
+    else:
+        filters = []
 
     print("Interface")
     if want & {"20", "21", "22", "23", "24"}:
@@ -1305,6 +1517,50 @@ def main():
         print("    define a macro swap(t, x, y) that exchanges two arguments of type t")
         print("    declare the temporary inside a block, and give it type t")
         print("    there is no stdin. The tests call swap and print the values afterward")
+    if "5-1" in want:
+        print("  src/chapter5/getint.c      the book's getint, getch, and ungetch")
+        print("    fix getint: a + or - not followed by a digit is pushed back on the input")
+        print("    the tests call getint once")
+        print("    return is what getint returned")
+        print("    pn is the integer stored, or unchanged")
+        print("    left is the characters still waiting on the input, in quotes")
+    if "5-2" in want:
+        print("  src/chapter5/getfloat.c    int getfloat(float *pn)")
+        print("    the floating-point analog of getint. getfloat returns int")
+        print("    the value is stored through pn. Use getch and ungetch from getint.c")
+        print("    the tests call getfloat once")
+        print("    return is what getfloat returned")
+        print("    pn is the float stored, or unchanged")
+        print("    left is the characters still waiting on the input, in quotes")
+    if "5-3" in want:
+        print("  src/chapter5/strcat.c      stdin -> stdout")
+        print("    void strcat(char *s, char *t) copies t onto the end of s. Use pointers")
+        print("    the first line of stdin is s. Its ending newline is not part of s")
+        print("    the second line is t. Its ending newline is not part of t")
+        print("    if there is no second line, t is empty")
+        print("    print the characters in s after the copy, then a newline")
+    if "5-4" in want:
+        print("  src/chapter5/strend.c      stdin -> stdout")
+        print("    strend(s, t) returns 1 if t occurs at the end of s, and 0 otherwise")
+        print("    the first line of stdin is s. Its ending newline is not part of s")
+        print("    the second line is t. Its ending newline is not part of t")
+        print("    if there is no second line, t is empty")
+        print("    an empty t occurs at the end of every s")
+        print("    print 1 or 0, then a newline")
+    if "5-5" in want:
+        print("  src/chapter5/strn.c")
+        print("    write strncpy(s, t, n), strncat(s, t, n), and strncmp(s, t, n)")
+        print("    the tests call them. No main is required")
+        print("    strncpy copies at most n characters of t into s and returns s")
+        print("    if t has fewer than n characters, pad the rest of those n with '\\0'")
+        print("    if t has at least n characters, copy those n and do not write a '\\0' after them")
+        print("    characters in s past n stay as they were")
+        print("    strncat appends at most n characters of t to s, writes a '\\0' at the end, and returns s")
+        print("    strncmp compares at most n characters. A '\\0' ends either string")
+        print("    0 means equal. Negative means s is less than t. Positive means s is greater")
+        print("    n of 0 compares nothing and returns 0")
+        print("    one function: make test-5-5-strncpy, make test-5-5-strncat, or make test-5-5-strncmp")
+        print("    one case: make test-5-5-strncpy-pad")
 
     passed = failed = 0
     runners = [
@@ -1342,10 +1598,15 @@ def main():
         ("4-12", test_itoar),
         ("4-13", test_reverse),
         ("4-14", test_swap),
+        ("5-1", test_getint),
+        ("5-2", test_getfloat),
+        ("5-3", test_strcat),
+        ("5-4", test_strend),
+        ("5-5", test_strn),
     ]
     for key, fn in runners:
         if key in want:
-            p, f = fn()
+            p, f = fn(filters) if key == "5-5" else fn()
             passed += p
             failed += f
 

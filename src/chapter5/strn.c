@@ -37,6 +37,7 @@ char *strncat(char *s, char *t, int n) {
 
         --n;
     }
+    *s = '\0';
 
     return ss;
 }

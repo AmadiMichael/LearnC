@@ -72,6 +72,13 @@ from check_strend import check as check_strend  # noqa: E402
 from check_strend import check_source as check_strend_source  # noqa: E402
 from check_strn import check as check_strn  # noqa: E402
 from check_strn import check_source as check_strn_source  # noqa: E402
+from run_5_6 import PARTS as PARTS_56  # noqa: E402
+from run_5_6 import test_5_6  # noqa: E402
+from check_sort import check as check_sort  # noqa: E402
+from check_sort import check_source as check_sort_source  # noqa: E402
+from check_day import check as check_day  # noqa: E402
+from check_ptr import check_pointer  # noqa: E402
+from check_expr import check as check_expr  # noqa: E402
 from check_ranges import (  # noqa: E402
     FLOAT_TYPES,
     INTEGER_TYPES,
@@ -126,6 +133,7 @@ def compile_prog(src_name, bin_name, chapter="chapter1", defines=None):
                 "reverse.c",
                 "strcat.c",
                 "strend.c",
+                "sort.c",
             )
             else ""
         )
@@ -533,6 +541,29 @@ def test_htoi():
 
     folder = os.path.join(TESTS_CH2, "2-3")
     return _run_inout_dir(binary, folder, check_htoi)
+
+
+def _run_argv_dir(binary, folder, check_fn):
+    """Each .in file is the argument list. Whitespace separates arguments."""
+    passed = failed = 0
+    names = sorted(n for n in os.listdir(folder) if n.endswith(".in"))
+    for name in names:
+        case = name[: -len(".in")]
+        args = read(os.path.join(folder, case + ".in")).split()
+        wanted = read(os.path.join(folder, case + ".out"))
+        rc, out, err, run_err = run_bin(binary, "", extra_args=args)
+        if run_err:
+            failed += not say(False, case, run_err)
+            continue
+        if rc != 0:
+            failed += not say(False, case, "exit {} stderr={!r}".format(rc, err))
+            continue
+        ok, detail = check_fn(out, wanted)
+        if ok:
+            passed += say(True, case)
+        else:
+            failed += not say(False, case, detail)
+    return passed, failed
 
 
 def _run_inout_dir(binary, folder, check_fn):
@@ -1207,6 +1238,87 @@ def test_strcat():
     return passed + p, failed + f
 
 
+def test_sortlines():
+    print("\n== 5-7 sort  (rewrite readlines) ==")
+    src = os.path.join(ROOT, "src", "chapter5", "sort.c")
+    passed = failed = 0
+    if os.path.isfile(src) and os.path.getsize(src) > 0:
+        ok, detail = check_sort_source(read(src))
+        if ok:
+            passed += say(True, "storage")
+        else:
+            failed += not say(False, "storage", detail)
+    binary, msg = compile_prog("sort.c", "sort5", chapter="chapter5")
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH5, "5-7"), check_sort)
+    return passed + p, failed + f
+
+
+def _compile_day():
+    src = os.path.join(ROOT, "src", "chapter5", "day.c")
+    if not os.path.isfile(src):
+        return None, "missing src/chapter5/day.c — the book's day_of_year and month_day"
+    os.makedirs(BIN, exist_ok=True)
+    user_obj = os.path.join(BIN, "day_user.o")
+    driver_obj = os.path.join(BIN, "day_driver.o")
+    out = os.path.join(BIN, "day5")
+    driver = os.path.join(HELPERS, "day_driver.c")
+    steps = [
+        ["gcc", "-std=c99", "-Wall", "-Wextra", "-Dmain=student_main", "-c", src, "-o", user_obj],
+        ["gcc", "-std=c99", "-Wall", "-Wextra", "-c", driver, "-o", driver_obj],
+        ["gcc", user_obj, driver_obj, "-o", out],
+    ]
+    for cmd in steps:
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode != 0:
+            err = proc.stderr.decode("utf-8", "replace").strip()
+            return None, "compile failed:\n{}".format(err)
+    return out, ""
+
+
+def test_day():
+    print("\n== 5-8 day_of_year, month_day  (reject a bad date) ==")
+    binary, msg = _compile_day()
+    if binary is None:
+        say(False, "compile", msg)
+        return 0, 1
+    return _run_inout_dir(binary, os.path.join(TESTS_CH5, "5-8"), check_day)
+
+
+def test_day_ptr():
+    print("\n== 5-9 day_of_year, month_day  (pointers) ==")
+    src_path = os.path.join(ROOT, "src", "chapter5", "day.c")
+    passed = failed = 0
+    if os.path.isfile(src_path) and os.path.getsize(src_path) > 0:
+        src = read(src_path)
+        for name, ret, missing in (
+            ("day_of_year", "int", "define int day_of_year(int year, int month, int day)."),
+            ("month_day", "void", "define void month_day(int year, int yearday, int *pmonth, int *pday)."),
+        ):
+            ok, detail = check_pointer(src, name, ret, missing)
+            if ok:
+                passed += say(True, "pointers-" + name)
+            else:
+                failed += not say(False, "pointers-" + name, detail)
+    binary, msg = _compile_day()
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    p, f = _run_inout_dir(binary, os.path.join(TESTS_CH5, "5-8"), check_day)
+    return passed + p, failed + f
+
+
+def test_expr():
+    print("\n== 5-10 expr  (reverse Polish from the command line) ==")
+    binary, msg = compile_prog("expr.c", "expr5", chapter="chapter5")
+    if binary is None:
+        say(False, "compile", msg)
+        return 0, 1
+    return _run_argv_dir(binary, os.path.join(TESTS_CH5, "5-10"), check_expr)
+
+
 def test_strend():
     print("\n== 5-4 strend  (1 if t occurs at the end of s, else 0) ==")
     src = os.path.join(ROOT, "src", "chapter5", "strend.c")
@@ -1322,27 +1434,38 @@ def main():
         "3-1", "3-2", "3-3", "3-4", "3-5", "3-6",
         "4-1", "4-2", "4-3", "4-4", "4-5", "4-6", "4-7", "4-8", "4-10", "4-11",
         "4-12", "4-13", "4-14",
-        "5-1", "5-2", "5-3", "5-4", "5-5",
+        "5-1", "5-2", "5-3", "5-4", "5-5", "5-6", "5-7", "5-8", "5-9", "5-10",
     }
     args = sys.argv[1:]
     want = set(a for a in args if a in known) if args else set(known)
-    filters = [a for a in args if a not in known]
-    if filters:
+    raw = [a for a in args if a not in known]
+    filters = []
+    parts56 = []
+    if raw:
         folder = os.path.join(TESTS_CH5, "5-5")
         cases = [n[: -len(".in")] for n in os.listdir(folder) if n.endswith(".in")]
         exact = set(cases)
-        unknown = [a for a in filters if not any(_strn_selected(case, [a], exact) for case in cases)]
+        unknown = []
+        for item in raw:
+            if item in PARTS_56:
+                parts56.append(item)
+            elif any(_strn_selected(case, [item], exact) for case in cases):
+                filters.append(item)
+            else:
+                unknown.append(item)
         if unknown:
             print(
-                "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-10 4-11 4-12 4-13 4-14 5-1 5-2 5-3 5-4 5-5.".format(
+                "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-10 4-11 4-12 4-13 4-14 5-1 5-2 5-3 5-4 5-5 5-6 5-7 5-8 5-9 5-10.".format(
                     ", ".join(unknown)
                 )
             )
             print("For 5-5, add strncpy, strncat, strncmp, or a case name like strncpy-pad.")
+            print("For 5-6, add {}.".format(", ".join(PARTS_56)))
             return 2
-        want.add("5-5")
-    else:
-        filters = []
+        if filters:
+            want.add("5-5")
+        if parts56:
+            want.add("5-6")
 
     print("Interface")
     if want & {"20", "21", "22", "23", "24"}:
@@ -1561,6 +1684,66 @@ def main():
         print("    n of 0 compares nothing and returns 0")
         print("    one function: make test-5-5-strncpy, make test-5-5-strncat, or make test-5-5-strncmp")
         print("    one case: make test-5-5-strncpy-pad")
+    if "5-6" in want:
+        print("  src/chapter5/5-6/          rewrite the routines with pointers")
+        print("    the function body uses pointers, with no array index. The tests call them")
+        print("    no main is required")
+        print("    getline.c   int getLine(char *s, int lim)   chapter 1 getline")
+        print("      the name is getLine. This machine already declares getline in stdio")
+        print("      store at most lim-1 characters. Stop at newline or EOF")
+        print("      if that newline is what stopped the read, store it too")
+        print("      write '\\0' after the stored characters and return how many were stored")
+        print("    atoi.c      int atoi(char *s)   chapter 3 atoi")
+        print("      skip leading whitespace, then an optional + or -, then digits")
+        print("      stop at the first non-digit. No digits means 0")
+        print("    itoa.c      void itoa(int n, char *s)   chapter 3 itoa")
+        print("      decimal digits, leading - if negative, including the most negative int")
+        print("    itob.c      void itob(int n, char *s, int b)")
+        print("      base 2 through 16. Digits 0-9 then a-f. Leading - if negative")
+        print("    itoaw.c     void itoa(int n, char *s, int w)")
+        print("      the same decimal digits, padded on the left with spaces out to width w")
+        print("      a number wider than w is printed in full")
+        print("    reverse.c   void reverse(char *s)   chapter 3 reverse, in place")
+        print("    strindex.c  int strindex(char *s, char *t)")
+        print("      the index of the first occurrence of t in s, or -1")
+        print("      an empty t returns -1")
+        print("    getop.c     int getop(char *s)   the chapter 4 calculator's getop")
+        print("      include \"calc.h\". The tests link the rest of src/chapter4/4-11")
+        print("      operators + - * /. A newline prints a tab and the top with %.8g")
+        print("    one routine: make test-5-6-getline, make test-5-6-atoi, make test-5-6-itoa,")
+        print("      make test-5-6-itob, make test-5-6-itoaw, make test-5-6-reverse,")
+        print("      make test-5-6-strindex, or make test-5-6-getop")
+    if "5-7" in want:
+        print("  src/chapter5/sort.c        the book's line sorter")
+        print("    rewrite readlines. Leave the rest of the program")
+        print("    main passes readlines a char array, and the lines are stored there")
+        print("    do not call alloc")
+        print("    the line reader is named getLine. getline is already declared in stdio.h")
+        print("    each input line ends with a newline. That newline is not part of the text")
+        print("    the program writes the lines in strcmp order, each followed by a newline")
+        print("    when another line will not fit, it prints")
+        print("      error: input too big to sort")
+        print("    and exits with a non-zero status")
+    if "5-8" in want:
+        print("  src/chapter5/day.c         the book's day_of_year and month_day")
+        print("    add checks for a bad month, day, or yearday. The tests call them")
+        print("    day_of_year(year, month, day) returns the day of the year, from 1")
+        print("    a month outside 1..12, or a day outside that month, returns -1")
+        print("    month_day(year, yearday, pmonth, pday) stores the month and the day")
+        print("    a yearday outside 1..365, or 1..366 in a leap year, stores -1 and -1")
+        print("    a leap year is divisible by 4, except centuries, except years divisible by 400")
+    if "5-9" in want:
+        print("  src/chapter5/day.c         rewrite day_of_year and month_day with pointers")
+        print("    the function body has no array index. daytab itself may be an array")
+        print("    same results as 5-8. A bad date is still -1")
+    if "5-10" in want:
+        print("  src/chapter5/expr.c        the program expr")
+        print("    arguments are the expression, one operand or operator each")
+        print("    reverse Polish: 2 3 4 + * prints 14")
+        print("    operators + - * /")
+        print("    -2 is negative two. - by itself is subtraction")
+        print("    a number is decimal and may include a fraction. .5 is a number. 2 4 / is 0.5")
+        print("    print that value, then a newline (%.8g is enough; a leading tab is fine)")
 
     passed = failed = 0
     runners = [
@@ -1603,10 +1786,20 @@ def main():
         ("5-3", test_strcat),
         ("5-4", test_strend),
         ("5-5", test_strn),
+        ("5-6", test_5_6),
+        ("5-7", test_sortlines),
+        ("5-8", test_day),
+        ("5-9", test_day_ptr),
+        ("5-10", test_expr),
     ]
     for key, fn in runners:
         if key in want:
-            p, f = fn(filters) if key == "5-5" else fn()
+            if key == "5-5":
+                p, f = fn(filters)
+            elif key == "5-6":
+                p, f = fn(parts56)
+            else:
+                p, f = fn()
             passed += p
             failed += f
 

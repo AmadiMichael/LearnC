@@ -79,6 +79,8 @@ from check_sort import check_source as check_sort_source  # noqa: E402
 from check_day import check as check_day  # noqa: E402
 from check_ptr import check_pointer  # noqa: E402
 from check_expr import check as check_expr  # noqa: E402
+from check_tabstop import check_detab as check_detab_stops  # noqa: E402
+from check_tabstop import check_entab as check_entab_stops  # noqa: E402
 from check_ranges import (  # noqa: E402
     FLOAT_TYPES,
     INTEGER_TYPES,
@@ -1319,6 +1321,78 @@ def test_expr():
     return _run_argv_dir(binary, os.path.join(TESTS_CH5, "5-10"), check_expr)
 
 
+def _stops_of(folder, case):
+    path = os.path.join(folder, case + ".args")
+    if not os.path.isfile(path):
+        return []
+    return [int(tok) for tok in read(path).split()]
+
+
+def _run_tab_file(binary, label, data, stops, check_fn):
+    args = [str(stop) for stop in stops]
+    rc, out, err, run_err = run_bin(binary, data, extra_args=args)
+    if run_err:
+        say(False, label, run_err)
+        return 0, 1
+    if rc != 0:
+        say(False, label, "exit {} stderr={!r}".format(rc, err))
+        return 0, 1
+    ok, detail = check_fn(data, out, stops)
+    if ok:
+        say(True, label)
+        return 1, 0
+    say(False, label, detail)
+    return 0, 1
+
+
+def _run_tab_dir(binary, folder, prefix, check_fn):
+    passed = failed = 0
+    names = sorted(n for n in os.listdir(folder) if n.endswith(".in"))
+    for name in names:
+        case = name[: -len(".in")]
+        data = read(os.path.join(folder, name))
+        stops = _stops_of(folder, case)
+        p, f = _run_tab_file(binary, prefix + case, data, stops, check_fn)
+        passed += p
+        failed += f
+    return passed, failed
+
+
+def test_tabstops():
+    print("\n== 5-11 detab, entab  (tab stops from the command line) ==")
+    passed = failed = 0
+    detab, msg = compile_prog("detab.c", "detab")
+    if detab is None:
+        say(False, "compile-detab", msg)
+        passed, failed = 0, 1
+    else:
+        p, f = _run_tab_dir(detab, os.path.join(TESTS, "1-20"), "detab default ", check_detab_stops)
+        passed += p
+        failed += f
+        p, f = _run_tab_dir(
+            detab,
+            os.path.join(TESTS_CH5, "5-11", "detab"),
+            "detab ",
+            check_detab_stops,
+        )
+        passed += p
+        failed += f
+    entab, msg = compile_prog("entab.c", "entab")
+    if entab is None:
+        say(False, "compile-entab", msg)
+        return passed, failed + 1
+    p, f = _run_tab_dir(entab, os.path.join(TESTS, "1-21"), "entab default ", check_entab_stops)
+    passed += p
+    failed += f
+    p, f = _run_tab_dir(
+        entab,
+        os.path.join(TESTS_CH5, "5-11", "entab"),
+        "entab ",
+        check_entab_stops,
+    )
+    return passed + p, failed + f
+
+
 def test_strend():
     print("\n== 5-4 strend  (1 if t occurs at the end of s, else 0) ==")
     src = os.path.join(ROOT, "src", "chapter5", "strend.c")
@@ -1434,7 +1508,7 @@ def main():
         "3-1", "3-2", "3-3", "3-4", "3-5", "3-6",
         "4-1", "4-2", "4-3", "4-4", "4-5", "4-6", "4-7", "4-8", "4-10", "4-11",
         "4-12", "4-13", "4-14",
-        "5-1", "5-2", "5-3", "5-4", "5-5", "5-6", "5-7", "5-8", "5-9", "5-10",
+        "5-1", "5-2", "5-3", "5-4", "5-5", "5-6", "5-7", "5-8", "5-9", "5-10", "5-11",
     }
     args = sys.argv[1:]
     want = set(a for a in args if a in known) if args else set(known)
@@ -1455,7 +1529,7 @@ def main():
                 unknown.append(item)
         if unknown:
             print(
-                "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-10 4-11 4-12 4-13 4-14 5-1 5-2 5-3 5-4 5-5 5-6 5-7 5-8 5-9 5-10.".format(
+                "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-10 4-11 4-12 4-13 4-14 5-1 5-2 5-3 5-4 5-5 5-6 5-7 5-8 5-9 5-10 5-11.".format(
                     ", ".join(unknown)
                 )
             )
@@ -1744,6 +1818,18 @@ def main():
         print("    -2 is negative two. - by itself is subtraction")
         print("    a number is decimal and may include a fraction. .5 is a number. 2 4 / is 0.5")
         print("    print that value, then a newline (%.8g is enough; a leading tab is fine)")
+    if "5-11" in want:
+        print("  src/chapter1/detab.c       the same program, tab stops from the command line")
+        print("  src/chapter1/entab.c       the same program, tab stops from the command line")
+        print("    each argument is a column number, starting at 1")
+        print("    a tab advances to the nearest listed column after the cursor")
+        print("    the arguments may be in any order")
+        print("    with no arguments, tab stops are every 8 columns, as in 1-20 and 1-21")
+        print("    detab 4, with a tab on stdin, prints four spaces")
+        print("    detab replaces each tab with spaces. entab replaces space runs")
+        print("    when one space already reaches the next stop, either that space or a tab is fine")
+        print("    a newline resets the column")
+        print("    each tab in these tests has a listed column after the cursor")
 
     passed = failed = 0
     runners = [
@@ -1791,6 +1877,7 @@ def main():
         ("5-8", test_day),
         ("5-9", test_day_ptr),
         ("5-10", test_expr),
+        ("5-11", test_tabstops),
     ]
     for key, fn in runners:
         if key in want:

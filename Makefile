@@ -143,3 +143,6 @@ test-5-10:
 
 test-5-11:
 	python3 tests/helpers/run_tests.py 5-11
+
+test-5-11-%:
+	python3 tests/helpers/run_tests.py 5-11 $*

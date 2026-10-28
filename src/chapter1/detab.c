@@ -1,29 +1,42 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 #define TAB_SIZE 8
 
-int remTab(int);
+int nextTabStop(int, int, int *, char *[]);
 
-int main() {
-  int s, outIndex, col;
+int main(int argc, char *argv[]) {
+  int s, outIndex, col, i;
 
+  i = argc == 1 ? 0 : 1;
   s = col = 0;
+  
   while (((s = getchar()) != EOF)) {
     if (s == '\t') {
-      int k = remTab(col);
-      for (int j = 0; j < k; ++j) { 
+      int k = nextTabStop(col, argc, &i, argv);
+      for (; col < k; ++col) { 
         putchar(' ');
       }
-      col += k;
     } else {
-      if (s == '\n') col = 0;
-      else ++col;
+      if (s == '\n') {
+        col = 0;
+        i = argc == 1 ? 0 : 1;
+      } else {
+        ++col;
+      }
 
       putchar(s);
     }
   }
 }
 
-int remTab(int x) {
-  return TAB_SIZE - (x % TAB_SIZE);
+int nextTabStop(int col, int argc, int *i, char *argv[]) {
+  if (*i) {
+    int next;
+    while((*i < argc) && (next = atoi(argv[(*i)++])) <= col);
+
+    return next;
+  } else {
+    return col + (TAB_SIZE - (col % TAB_SIZE));
+  }
 }

@@ -1345,11 +1345,42 @@ def _run_tab_file(binary, label, data, stops, check_fn):
     return 0, 1
 
 
-def _run_tab_dir(binary, folder, prefix, check_fn):
+def _tab_key(prefix, case):
+    return (prefix + case).replace(" ", "-")
+
+
+def _tab_selected(key, filters):
+    for item in filters:
+        if key == item or key.startswith(item + "-"):
+            return True
+        for head in ("detab-default-", "entab-default-", "detab-", "entab-"):
+            if key.startswith(head) and key[len(head):] == item:
+                return True
+    return False
+
+
+def _tab_keys():
+    groups = (
+        (os.path.join(TESTS, "1-20"), "detab default "),
+        (os.path.join(TESTS_CH5, "5-11", "detab"), "detab "),
+        (os.path.join(TESTS, "1-21"), "entab default "),
+        (os.path.join(TESTS_CH5, "5-11", "entab"), "entab "),
+    )
+    keys = []
+    for folder, prefix in groups:
+        for name in os.listdir(folder):
+            if name.endswith(".in"):
+                keys.append(_tab_key(prefix, name[: -len(".in")]))
+    return keys
+
+
+def _run_tab_dir(binary, folder, prefix, check_fn, filters):
     passed = failed = 0
     names = sorted(n for n in os.listdir(folder) if n.endswith(".in"))
     for name in names:
         case = name[: -len(".in")]
+        if filters and not _tab_selected(_tab_key(prefix, case), filters):
+            continue
         data = read(os.path.join(folder, name))
         stops = _stops_of(folder, case)
         p, f = _run_tab_file(binary, prefix + case, data, stops, check_fn)
@@ -1358,39 +1389,63 @@ def _run_tab_dir(binary, folder, prefix, check_fn):
     return passed, failed
 
 
-def test_tabstops():
-    print("\n== 5-11 detab, entab  (tab stops from the command line) ==")
+def test_tabstops(filters=None):
+    filters = list(filters or [])
+    title = ", ".join(filters) if filters else "detab, entab"
+    print("\n== 5-11 {}  (tab stops from the command line) ==".format(title))
+    if filters and not any(_tab_selected(key, filters) for key in _tab_keys()):
+        say(
+            False,
+            "filter",
+            "no 5-11 test matches {}. Use detab, entab, or a case name like detab-word-tab.".format(
+                ", ".join(filters)
+            ),
+        )
+        return 0, 1
     passed = failed = 0
-    detab, msg = compile_prog("detab.c", "detab")
-    if detab is None:
-        say(False, "compile-detab", msg)
-        passed, failed = 0, 1
-    else:
-        p, f = _run_tab_dir(detab, os.path.join(TESTS, "1-20"), "detab default ", check_detab_stops)
-        passed += p
-        failed += f
+    keys = _tab_keys() if filters else []
+    run_detab = not filters or any(key.startswith("detab") and _tab_selected(key, filters) for key in keys)
+    run_entab = not filters or any(key.startswith("entab") and _tab_selected(key, filters) for key in keys)
+    if run_detab:
+        detab, msg = compile_prog("detab.c", "detab")
+        if detab is None:
+            say(False, "compile-detab", msg)
+            failed += 1
+        else:
+            p, f = _run_tab_dir(
+                detab, os.path.join(TESTS, "1-20"), "detab default ", check_detab_stops, filters
+            )
+            passed += p
+            failed += f
+            p, f = _run_tab_dir(
+                detab,
+                os.path.join(TESTS_CH5, "5-11", "detab"),
+                "detab ",
+                check_detab_stops,
+                filters,
+            )
+            passed += p
+            failed += f
+    if run_entab:
+        entab, msg = compile_prog("entab.c", "entab")
+        if entab is None:
+            say(False, "compile-entab", msg)
+            return passed, failed + 1
         p, f = _run_tab_dir(
-            detab,
-            os.path.join(TESTS_CH5, "5-11", "detab"),
-            "detab ",
-            check_detab_stops,
+            entab, os.path.join(TESTS, "1-21"), "entab default ", check_entab_stops, filters
         )
         passed += p
         failed += f
-    entab, msg = compile_prog("entab.c", "entab")
-    if entab is None:
-        say(False, "compile-entab", msg)
-        return passed, failed + 1
-    p, f = _run_tab_dir(entab, os.path.join(TESTS, "1-21"), "entab default ", check_entab_stops)
-    passed += p
-    failed += f
-    p, f = _run_tab_dir(
-        entab,
-        os.path.join(TESTS_CH5, "5-11", "entab"),
-        "entab ",
-        check_entab_stops,
-    )
-    return passed + p, failed + f
+        p, f = _run_tab_dir(
+            entab,
+            os.path.join(TESTS_CH5, "5-11", "entab"),
+            "entab ",
+            check_entab_stops,
+            filters,
+        )
+        passed += p
+        failed += f
+    return passed, failed
 
 
 def test_strend():
@@ -1515,16 +1570,20 @@ def main():
     raw = [a for a in args if a not in known]
     filters = []
     parts56 = []
+    filters511 = []
     if raw:
         folder = os.path.join(TESTS_CH5, "5-5")
         cases = [n[: -len(".in")] for n in os.listdir(folder) if n.endswith(".in")]
         exact = set(cases)
+        tab_keys = _tab_keys()
         unknown = []
         for item in raw:
             if item in PARTS_56:
                 parts56.append(item)
             elif any(_strn_selected(case, [item], exact) for case in cases):
                 filters.append(item)
+            elif any(_tab_selected(key, [item]) for key in tab_keys):
+                filters511.append(item)
             else:
                 unknown.append(item)
         if unknown:
@@ -1535,11 +1594,14 @@ def main():
             )
             print("For 5-5, add strncpy, strncat, strncmp, or a case name like strncpy-pad.")
             print("For 5-6, add {}.".format(", ".join(PARTS_56)))
+            print("For 5-11, add detab, entab, or a case name like detab-word-tab.")
             return 2
         if filters:
             want.add("5-5")
         if parts56:
             want.add("5-6")
+        if filters511:
+            want.add("5-11")
 
     print("Interface")
     if want & {"20", "21", "22", "23", "24"}:
@@ -1823,13 +1885,14 @@ def main():
         print("  src/chapter1/entab.c       the same program, tab stops from the command line")
         print("    each argument is a column number, starting at 1")
         print("    a tab advances to the nearest listed column after the cursor")
-        print("    the arguments may be in any order")
         print("    with no arguments, tab stops are every 8 columns, as in 1-20 and 1-21")
         print("    detab 4, with a tab on stdin, prints four spaces")
         print("    detab replaces each tab with spaces. entab replaces space runs")
         print("    when one space already reaches the next stop, either that space or a tab is fine")
         print("    a newline resets the column")
         print("    each tab in these tests has a listed column after the cursor")
+        print("    one program: make test-5-11-detab or make test-5-11-entab")
+        print("    one case: make test-5-11-detab-word-tab")
 
     passed = failed = 0
     runners = [
@@ -1885,6 +1948,8 @@ def main():
                 p, f = fn(filters)
             elif key == "5-6":
                 p, f = fn(parts56)
+            elif key == "5-11":
+                p, f = fn(filters511)
             else:
                 p, f = fn()
             passed += p

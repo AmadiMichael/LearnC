@@ -3,17 +3,16 @@
 
 #define TAB_SIZE 8
 
-int nextTabStop(int, int, int *, char *[]);
+int nextTabStop(int, int, char *[]);
 
 int main(int argc, char *argv[]) {
   int s, outIndex, col, i;
 
-  i = argc == 1 ? 0 : 1;
   s = col = 0;
   
   while (((s = getchar()) != EOF)) {
     if (s == '\t') {
-      int k = nextTabStop(col, argc, &i, argv);
+      int k = nextTabStop(col, argc, argv);
       for (; col < k; ++col) { 
         putchar(' ');
       }
@@ -30,10 +29,11 @@ int main(int argc, char *argv[]) {
   }
 }
 
-int nextTabStop(int col, int argc, int *i, char *argv[]) {
-  if (*i) {
+int nextTabStop(int col, int argc, char *argv[]) {
+  if (argc > 1) {
     int next;
-    while((*i < argc) && (next = atoi(argv[(*i)++])) <= col);
+    int i = 1;
+    while((i < argc) && (next = atoi(argv[i++])) <= col);
 
     return next;
   } else {

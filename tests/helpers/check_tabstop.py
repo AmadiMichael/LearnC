@@ -9,8 +9,36 @@ from pretty import mismatch
 DEFAULT = 8
 
 
+def stops_for(tokens):
+    """Turn command-line arguments into the stops the checker uses.
+
+    A column list stays a list. -m +n is every n columns starting at column m.
+    +n alone starts at column n. -m alone repeats every 8 columns.
+    """
+    if not tokens:
+        return []
+    if any(tok[:1] in "+-" for tok in tokens):
+        origin = step = None
+        for tok in tokens:
+            if tok.startswith("+"):
+                step = int(tok[1:])
+            elif tok.startswith("-"):
+                origin = int(tok[1:])
+        if step is None:
+            step = DEFAULT
+        if origin is None:
+            origin = step
+        return ("every", origin, step)
+    return [int(tok) for tok in tokens]
+
+
 def next_stop(col, stops):
     """col is how many columns are already filled. The next stop is greater than col."""
+    if isinstance(stops, tuple):
+        _, origin, step = stops
+        if col < origin:
+            return origin
+        return origin + step * (((col - origin) // step) + 1)
     nxt = None
     for stop in stops:
         if stop > col and (nxt is None or stop < nxt):
@@ -40,6 +68,9 @@ def expand(text, stops):
 def describe(stops):
     if not stops:
         return "tab stops every 8 columns"
+    if isinstance(stops, tuple):
+        _, origin, step = stops
+        return "tab stops every {} columns, starting at column {}".format(step, origin)
     cols = ", ".join(str(stop) for stop in sorted(set(stops)))
     return "tab stops at column " + cols
 

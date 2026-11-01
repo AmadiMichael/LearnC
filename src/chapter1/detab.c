@@ -9,11 +9,11 @@ int main(int argc, char *argv[]) {
   int s, outIndex, col, i;
 
   s = col = 0;
-  
+
   while (((s = getchar()) != EOF)) {
     if (s == '\t') {
       int k = nextTabStop(col, argc, argv);
-      for (; col < k; ++col) { 
+      for (; col < k; ++col) {
         putchar(' ');
       }
     } else {
@@ -31,10 +31,31 @@ int main(int argc, char *argv[]) {
 
 int nextTabStop(int col, int argc, char *argv[]) {
   if (argc > 1) {
-    int next;
-    int i = 1;
-    while((i < argc) && (next = atoi(argv[i++])) <= col);
+    char **first = argv;
 
+    if (**(first + 1) == '-') {
+      int m, n;
+
+      // Get m.
+      char *mstart = *(first + 1);
+      m = atoi(mstart + 1);
+
+      // Get n.
+      char *nstart = *(first + 2);
+      n = atoi(nstart + 1);
+
+      if (col < m) {
+        return m;
+      } else {
+        return col + (n - ((col - m) % n));
+      }
+    }
+
+    int next;
+    while((*(++first) != NULL)) {
+      next = atoi(*first);
+      if (next > col) break;
+    }
     return next;
   } else {
     return col + (TAB_SIZE - (col % TAB_SIZE));

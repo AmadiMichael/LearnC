@@ -80,6 +80,8 @@ from check_day import check as check_day  # noqa: E402
 from check_ptr import check_pointer  # noqa: E402
 from check_expr import check as check_expr  # noqa: E402
 from check_tabstop import check_detab as check_detab_stops  # noqa: E402
+from check_tail import check as check_tail  # noqa: E402
+from check_tail import check_storage as check_tail_storage  # noqa: E402
 from check_tabstop import check_entab as check_entab_stops  # noqa: E402
 from check_tabstop import stops_for  # noqa: E402
 from check_ranges import (  # noqa: E402
@@ -1479,7 +1481,7 @@ def test_tabrange(filters=None):
         say(
             False,
             "filter",
-            "no 5-12 test matches {}. Use detab, entab, or a case name like detab-every.".format(
+            "no 5-12 test matches {}. Use detab, entab, or a case name like detab-both.".format(
                 ", ".join(filters)
             ),
         )
@@ -1510,6 +1512,58 @@ def test_tabrange(filters=None):
             p, f = _run_tab_dir(entab, folder, prefix, check_entab_stops, filters)
             passed += p
             failed += f
+    return passed, failed
+
+
+def _tail_cases():
+    folder = os.path.join(TESTS_CH5, "5-13")
+    if not os.path.isdir(folder):
+        return []
+    return sorted(name[: -len(".in")] for name in os.listdir(folder) if name.endswith(".in"))
+
+
+def test_tail(filters=None):
+    filters = list(filters or [])
+    title = ", ".join(filters) if filters else "last n lines"
+    print("\n== 5-13 tail  ({}) ==".format(title))
+    cases = _tail_cases()
+    if filters and not any(item in cases for item in filters):
+        say(
+            False,
+            "filter",
+            "no 5-13 test matches {}. Use a case name like three.".format(", ".join(filters)),
+        )
+        return 0, 1
+    passed = failed = 0
+    src = os.path.join(ROOT, "src", "chapter5", "tail.c")
+    if os.path.isfile(src) and os.path.getsize(src) > 0:
+        ok, detail = check_tail_storage(read(src))
+        if ok:
+            passed += say(True, "storage")
+        else:
+            failed += not say(False, "storage", detail)
+    binary, msg = compile_prog("tail.c", "tail5", chapter="chapter5")
+    if binary is None:
+        say(False, "compile", msg)
+        return passed, failed + 1
+    folder = os.path.join(TESTS_CH5, "5-13")
+    for case in cases:
+        if filters and case not in filters:
+            continue
+        data = read(os.path.join(folder, case + ".in"))
+        argv = _argv_of(folder, case)
+        rc, out, err, run_err = run_bin(binary, data, extra_args=argv)
+        if run_err:
+            failed += not say(False, case, run_err)
+            continue
+        if rc != 0:
+            failed += not say(False, case, "exit {} stderr={!r}".format(rc, err))
+            continue
+        ok, detail = check_tail(data, out, argv)
+        if ok:
+            passed += say(True, case)
+        else:
+            failed += not say(False, case, detail)
     return passed, failed
 
 
@@ -1629,6 +1683,7 @@ def main():
         "4-1", "4-2", "4-3", "4-4", "4-5", "4-6", "4-7", "4-8", "4-10", "4-11",
         "4-12", "4-13", "4-14",
         "5-1", "5-2", "5-3", "5-4", "5-5", "5-6", "5-7", "5-8", "5-9", "5-10", "5-11", "5-12",
+        "5-13",
     }
     args = sys.argv[1:]
     want = set(a for a in args if a in known) if args else set(known)
@@ -1637,36 +1692,43 @@ def main():
     parts56 = []
     filters511 = []
     filters512 = []
+    filters513 = []
     if raw:
         folder = os.path.join(TESTS_CH5, "5-5")
         cases = [n[: -len(".in")] for n in os.listdir(folder) if n.endswith(".in")]
         exact = set(cases)
         tab_keys = _tab_keys()
         tab_keys_512 = _tab_keys_from(TAB_GROUPS_512)
+        tail_cases = _tail_cases()
         unknown = []
         for item in raw:
             if item in PARTS_56:
                 parts56.append(item)
             elif any(_strn_selected(case, [item], exact) for case in cases):
                 filters.append(item)
+            elif "5-13" in want and item in tail_cases:
+                filters513.append(item)
             elif "5-12" in want and any(_tab_selected(key, [item]) for key in tab_keys_512):
                 filters512.append(item)
             elif any(_tab_selected(key, [item]) for key in tab_keys):
                 filters511.append(item)
             elif any(_tab_selected(key, [item]) for key in tab_keys_512):
                 filters512.append(item)
+            elif item in tail_cases:
+                filters513.append(item)
             else:
                 unknown.append(item)
         if unknown:
             print(
-                "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-10 4-11 4-12 4-13 4-14 5-1 5-2 5-3 5-4 5-5 5-6 5-7 5-8 5-9 5-10 5-11 5-12.".format(
+                "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-10 4-11 4-12 4-13 4-14 5-1 5-2 5-3 5-4 5-5 5-6 5-7 5-8 5-9 5-10 5-11 5-12 5-13.".format(
                     ", ".join(unknown)
                 )
             )
             print("For 5-5, add strncpy, strncat, strncmp, or a case name like strncpy-pad.")
             print("For 5-6, add {}.".format(", ".join(PARTS_56)))
             print("For 5-11, add detab, entab, or a case name like detab-word-tab.")
-            print("For 5-12, add detab, entab, or a case name like detab-every.")
+            print("For 5-12, add detab, entab, or a case name like detab-both.")
+            print("For 5-13, add a case name like three.")
             return 2
         if filters:
             want.add("5-5")
@@ -1676,6 +1738,8 @@ def main():
             want.add("5-11")
         if filters512:
             want.add("5-12")
+        if filters513:
+            want.add("5-13")
 
     print("Interface")
     if want & {"20", "21", "22", "23", "24"}:
@@ -1972,12 +2036,19 @@ def main():
         print("  src/chapter1/entab.c")
         print("    -m +n means tab stops every n columns, starting at column m")
         print("    detab -5 +4, with a tab on stdin, prints five spaces. The next tab prints four")
-        print("    +n alone starts at column n. +4 means columns 4, 8, 12, ...")
-        print("    -m alone repeats every 8 columns. -4 means columns 4, 12, 20, ...")
-        print("    -m and +n may be written in either order")
         print("    a column list, or no arguments, stays as in 5-11")
         print("    one program: make test-5-12-detab or make test-5-12-entab")
-        print("    one case: make test-5-12-detab-every")
+        print("    one case: make test-5-12-detab-both")
+    if "5-13" in want:
+        print("  src/chapter5/tail.c        the program tail")
+        print("    stdin is the text. stdout is the last n lines of that text")
+        print("    with no argument, n is 10")
+        print("    tail -n sets n. The argument -5 asks for the last five lines")
+        print("    when the input has fewer than n lines, print the lines it has")
+        print("    -0 prints nothing")
+        print("    a final line with no newline is still a line")
+        print("    store lines as in Section 5.6, through an array of pointers")
+        print("    one case: make test-5-13-three")
 
     passed = failed = 0
     runners = [
@@ -2027,6 +2098,7 @@ def main():
         ("5-10", test_expr),
         ("5-11", test_tabstops),
         ("5-12", test_tabrange),
+        ("5-13", test_tail),
     ]
     for key, fn in runners:
         if key in want:
@@ -2038,6 +2110,8 @@ def main():
                 p, f = fn(filters511)
             elif key == "5-12":
                 p, f = fn(filters512)
+            elif key == "5-13":
+                p, f = fn(filters513)
             else:
                 p, f = fn()
             passed += p

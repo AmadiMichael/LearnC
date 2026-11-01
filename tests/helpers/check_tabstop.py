@@ -13,7 +13,6 @@ def stops_for(tokens):
     """Turn command-line arguments into the stops the checker uses.
 
     A column list stays a list. -m +n is every n columns starting at column m.
-    +n alone starts at column n. -m alone repeats every 8 columns.
     """
     if not tokens:
         return []
@@ -24,10 +23,8 @@ def stops_for(tokens):
                 step = int(tok[1:])
             elif tok.startswith("-"):
                 origin = int(tok[1:])
-        if step is None:
-            step = DEFAULT
-        if origin is None:
-            origin = step
+        if origin is None or step is None:
+            raise ValueError("-m +n needs both the start column and the step")
         return ("every", origin, step)
     return [int(tok) for tok in tokens]
 

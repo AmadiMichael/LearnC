@@ -76,6 +76,8 @@ from run_5_6 import PARTS as PARTS_56  # noqa: E402
 from run_5_6 import test_5_6  # noqa: E402
 from check_sort import check as check_sort  # noqa: E402
 from check_sort import check_source as check_sort_source  # noqa: E402
+from check_sortflags import check as check_sortflags  # noqa: E402
+from check_sortfold import check as check_sortfold  # noqa: E402
 from check_day import check as check_day  # noqa: E402
 from check_ptr import check_pointer  # noqa: E402
 from check_expr import check as check_expr  # noqa: E402
@@ -1567,6 +1569,101 @@ def test_tail(filters=None):
     return passed, failed
 
 
+def _sort_cases():
+    folder = os.path.join(TESTS_CH5, "5-14")
+    if not os.path.isdir(folder):
+        return []
+    return sorted(name[: -len(".in")] for name in os.listdir(folder) if name.endswith(".in"))
+
+
+def test_sortflags(filters=None):
+    filters = list(filters or [])
+    title = ", ".join(filters) if filters else "-r, including with -n"
+    print("\n== 5-14 sort  ({}) ==".format(title))
+    cases = _sort_cases()
+    if filters and not any(item in cases for item in filters):
+        say(
+            False,
+            "filter",
+            "no 5-14 test matches {}. Use a case name like numeric-r.".format(", ".join(filters)),
+        )
+        return 0, 1
+    binary, msg = compile_prog("sort.c", "sort5r", chapter="chapter5")
+    if binary is None:
+        say(False, "compile", msg)
+        return 0, 1
+    passed = failed = 0
+    folder = os.path.join(TESTS_CH5, "5-14")
+    for case in cases:
+        if filters and case not in filters:
+            continue
+        data = read(os.path.join(folder, case + ".in"))
+        argv = _argv_of(folder, case)
+        rc, out, err, run_err = run_bin(binary, data, extra_args=argv)
+        if run_err:
+            failed += not say(False, case, run_err)
+            continue
+        if rc != 0:
+            failed += not say(False, case, "exit {} stderr={!r}".format(rc, err))
+            continue
+        ok, detail = check_sortflags(data, out, argv)
+        if ok:
+            passed += say(True, case)
+        else:
+            failed += not say(False, case, detail)
+    return passed, failed
+
+
+def _sort_cases_from(folder):
+    if not os.path.isdir(folder):
+        return []
+    return sorted(name[: -len(".in")] for name in os.listdir(folder) if name.endswith(".in"))
+
+
+def test_sortfold(filters=None):
+    filters = list(filters or [])
+    title = ", ".join(filters) if filters else "-f folds case"
+    print("\n== 5-15 sort  ({}) ==".format(title))
+    groups = (
+        (os.path.join(TESTS_CH5, "5-14"), check_sortfold),
+        (os.path.join(TESTS_CH5, "5-15"), check_sortfold),
+    )
+    names = []
+    for folder, _ in groups:
+        names.extend(_sort_cases_from(folder))
+    if filters and not any(item in names for item in filters):
+        say(
+            False,
+            "filter",
+            "no 5-15 test matches {}. Use a case name like fold.".format(", ".join(filters)),
+        )
+        return 0, 1
+    binary, msg = compile_prog("sort.c", "sort5f", chapter="chapter5")
+    if binary is None:
+        say(False, "compile", msg)
+        return 0, 1
+    passed = failed = 0
+    for folder, check_fn in groups:
+        for case in _sort_cases_from(folder):
+            if filters and case not in filters:
+                continue
+            data = read(os.path.join(folder, case + ".in"))
+            argv = _argv_of(folder, case)
+            rc, out, err, run_err = run_bin(binary, data, extra_args=argv)
+            if run_err:
+                failed += not say(False, case, run_err)
+                continue
+            if rc != 0:
+                failed += not say(False, case, "exit {} stderr={!r}".format(rc, err))
+                continue
+            ok, detail = check_fn(data, out, argv)
+            if ok:
+                passed += say(True, case)
+            else:
+                failed += not say(False, case, detail)
+    return passed, failed
+
+
 def test_strend():
     print("\n== 5-4 strend  (1 if t occurs at the end of s, else 0) ==")
     src = os.path.join(ROOT, "src", "chapter5", "strend.c")
@@ -1683,7 +1780,7 @@ def main():
         "4-1", "4-2", "4-3", "4-4", "4-5", "4-6", "4-7", "4-8", "4-10", "4-11",
         "4-12", "4-13", "4-14",
         "5-1", "5-2", "5-3", "5-4", "5-5", "5-6", "5-7", "5-8", "5-9", "5-10", "5-11", "5-12",
-        "5-13",
+        "5-13", "5-14", "5-15",
     }
     args = sys.argv[1:]
     want = set(a for a in args if a in known) if args else set(known)
@@ -1693,6 +1790,8 @@ def main():
     filters511 = []
     filters512 = []
     filters513 = []
+    filters514 = []
+    filters515 = []
     if raw:
         folder = os.path.join(TESTS_CH5, "5-5")
         cases = [n[: -len(".in")] for n in os.listdir(folder) if n.endswith(".in")]
@@ -1700,12 +1799,19 @@ def main():
         tab_keys = _tab_keys()
         tab_keys_512 = _tab_keys_from(TAB_GROUPS_512)
         tail_cases = _tail_cases()
+        sort_cases = _sort_cases()
+        sort_cases_515 = _sort_cases_from(os.path.join(TESTS_CH5, "5-15"))
+        sort_names_515 = set(sort_cases) | set(sort_cases_515)
         unknown = []
         for item in raw:
             if item in PARTS_56:
                 parts56.append(item)
             elif any(_strn_selected(case, [item], exact) for case in cases):
                 filters.append(item)
+            elif "5-15" in want and item in sort_names_515:
+                filters515.append(item)
+            elif "5-14" in want and item in sort_cases:
+                filters514.append(item)
             elif "5-13" in want and item in tail_cases:
                 filters513.append(item)
             elif "5-12" in want and any(_tab_selected(key, [item]) for key in tab_keys_512):
@@ -1716,11 +1822,15 @@ def main():
                 filters512.append(item)
             elif item in tail_cases:
                 filters513.append(item)
+            elif item in sort_cases:
+                filters514.append(item)
+            elif item in sort_cases_515:
+                filters515.append(item)
             else:
                 unknown.append(item)
         if unknown:
             print(
-                "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-10 4-11 4-12 4-13 4-14 5-1 5-2 5-3 5-4 5-5 5-6 5-7 5-8 5-9 5-10 5-11 5-12 5-13.".format(
+                "Unknown exercise(s): {}. Use 20 21 22 23 24 2-1 2-2 2-3 2-4 2-5 2-6 2-7 2-8 2-9 2-10 3-1 3-2 3-3 3-4 3-5 3-6 4-1 4-2 4-3 4-4 4-5 4-6 4-7 4-8 4-10 4-11 4-12 4-13 4-14 5-1 5-2 5-3 5-4 5-5 5-6 5-7 5-8 5-9 5-10 5-11 5-12 5-13 5-14 5-15.".format(
                     ", ".join(unknown)
                 )
             )
@@ -1729,6 +1839,8 @@ def main():
             print("For 5-11, add detab, entab, or a case name like detab-word-tab.")
             print("For 5-12, add detab, entab, or a case name like detab-both.")
             print("For 5-13, add a case name like three.")
+            print("For 5-14, add a case name like numeric-r.")
+            print("For 5-15, add a case name like fold.")
             return 2
         if filters:
             want.add("5-5")
@@ -1740,6 +1852,10 @@ def main():
             want.add("5-12")
         if filters513:
             want.add("5-13")
+        if filters514:
+            want.add("5-14")
+        if filters515:
+            want.add("5-15")
 
     print("Interface")
     if want & {"20", "21", "22", "23", "24"}:
@@ -2049,6 +2165,20 @@ def main():
         print("    a final line with no newline is still a line")
         print("    store lines as in Section 5.6, through an array of pointers")
         print("    one case: make test-5-13-three")
+    if "5-14" in want:
+        print("  src/chapter5/sort.c        the sort program, plus -r")
+        print("    stdin is the lines. stdout is those lines in order, each followed by a newline")
+        print("    -r sorts in decreasing order")
+        print("    -n is the numeric sort. -r works with it, so the numbers decrease")
+        print("    -n and -r are separate arguments. -n -r and -r -n are those two flags")
+        print("    with no flag, the lines stay in increasing order")
+        print("    one case: make test-5-14-numeric-r")
+    if "5-15" in want:
+        print("  src/chapter5/sort.c        the sort program, plus -f")
+        print("    stdin is the lines. stdout is those lines in order, each followed by a newline")
+        print("    -f folds upper and lower case together. a and A compare equal")
+        print("    -n and -r stay as in 5-14")
+        print("    one case: make test-5-15-fold")
 
     passed = failed = 0
     runners = [
@@ -2099,6 +2229,8 @@ def main():
         ("5-11", test_tabstops),
         ("5-12", test_tabrange),
         ("5-13", test_tail),
+        ("5-14", test_sortflags),
+        ("5-15", test_sortfold),
     ]
     for key, fn in runners:
         if key in want:
@@ -2112,6 +2244,10 @@ def main():
                 p, f = fn(filters512)
             elif key == "5-13":
                 p, f = fn(filters513)
+            elif key == "5-14":
+                p, f = fn(filters514)
+            elif key == "5-15":
+                p, f = fn(filters515)
             else:
                 p, f = fn()
             passed += p
